@@ -50,24 +50,21 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
                 while (true) {
                     debugLog("start get requestChannel")
                     val set = mutableSetOf<S>()
-                    set.add(requestChannel.receive())
-//                    for (i in requestChannel) {
-//                        set.add(i)
-//                    }
-                    debugLog("start get requestChannel data $set")
-                    val resultMap = requestDelegate.request(set)
-                    for (entry in resultMap) {
-                        responseChannel.send(entry)
+                    val response = withTimeoutOrNull(lastTTL) { requestChannel.receive() }
+                    if (response == null) {
+                        break
+                    } else {
+                        debugLog("start get requestChannel data $response")
+                        val resultMap = requestDelegate.request(response)
+                        for (entry in resultMap) {
+                            responseChannel.send(entry)
+                        }
+                        delay(lastTTL)
                     }
-                    delay(lastTTL)
                 }
                 isStartedRequest.compareAndSet(true, false)
             }
         }
-    }
-
-    private fun waitResponse() {
-
     }
 
 
@@ -79,7 +76,13 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
 
         override suspend fun enqueueAwait(): R {
             return scope.async {
-                responseChannel.first { it.key == requestData}.value
+                while (true) {
+                    val entry = responseChannel.receive()
+                    if (entry.key == requestData) {
+                        return@async entry.value
+                    }
+                }
+                throw NoSuchElementException("cannot find match element, key is $requestData")
             }.await()
         }
 
