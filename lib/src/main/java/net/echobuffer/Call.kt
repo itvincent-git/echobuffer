@@ -1,6 +1,6 @@
 package net.echobuffer
 
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  *
@@ -8,19 +8,20 @@ import kotlinx.coroutines.Deferred
  */
 interface Call<R> {
     fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit)
-    suspend fun enqueueForDeferred(): Deferred<R>
+    suspend fun enqueueAwait(): R
 }
 
-class RealCall<R>(): Call<R> {
+class CacheCall<R>(val cacheValue: R): Call<R> {
     private var success: ((R) -> Unit)? = null
     private var error: ((Throwable) -> Unit)? = null
 
     override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
-
+        return success(cacheValue)
     }
 
-    override suspend fun enqueueForDeferred(): Deferred<R> {
-
+    override suspend fun enqueueAwait(): R {
+        return cacheValue
     }
 
 }
+
