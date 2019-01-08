@@ -42,9 +42,9 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
                     withContext(Dispatchers.Main) {
                         //do something in UI
                     }
-                    debugLog("response is $userInfo")
+                    debugLog("enqueueAwait response is $userInfo")
                 } catch (t: Throwable) {
-                    errorLog("response error", t)
+                    errorLog("enqueueAwait response error", t)
                 }
             }
         }
@@ -54,9 +54,9 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
             val call = echoBufferRequest.send(key)
             debugLog("send $key")
             call.enqueue( {
-                debugLog("response is $it")
+                debugLog("enqueue response is $it")
             }, {
-                errorLog("response error", it)
+                errorLog("enqueue response error", it)
             })
 
         }

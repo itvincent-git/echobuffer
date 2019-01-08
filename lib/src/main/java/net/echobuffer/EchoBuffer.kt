@@ -73,14 +73,23 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
         }
         scope.async {
             actor.send(data)
-            debugLog("after send")
+            //debugLog("after send")
         }
         return RequestCall(data)
     }
 
     inner class RequestCall(protected val requestData: S): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
-
+            scope.async {
+                while (true) {
+                    val entry = responseChannel.receive()
+                    if (entry.key == requestData) {
+                        success(entry.value)
+                        return@async
+                    }
+                }
+                error(NoSuchElementException("cannot find match element, key is $requestData"))
+            }
         }
 
         override suspend fun enqueueAwait(): R {
@@ -96,73 +105,4 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
         }
     }
 
-
-    //=============
-
-//    override fun send(data: S): Call<R> {
-//        val cacheValue = cache[data]
-//        if (cacheValue != null) {
-//            return CacheCall(cacheValue)
-//        }
-//        scope.async {
-//            requestChannel.offer(data)
-//            debugLog("after send")
-//            startRequest()
-//        }
-//        return RequestCall(data)
-//    }
-//
-//    private fun startRequest() {
-//        if (isStartedRequest.compareAndSet(false, true)) {
-//            scope.async {
-//                while (true) {
-//                    //debugLog("start get requestChannel")
-//                    val set = fetchRequests()
-//                    if (set.isEmpty()) {
-//                        break
-//                    }
-//                    val resultMap = requestDelegate.request(set)
-//                    for (entry in resultMap) {
-//                        responseChannel.send(entry)
-//                    }
-//                    delay(lastTTL)
-//                }
-//                isStartedRequest.compareAndSet(true, false)
-//            }
-//        }
-//    }
-//
-//    private fun fetchRequests(): Set<S> {
-//        var recv: S?
-//        val set = mutableSetOf<S>()
-//        do {
-//            recv =  requestChannel.poll()
-//            recv?.let {
-//                set.add(it)
-//            }
-//        } while (recv != null)
-//        debugLog("start get requestChannel data $set")
-//        return set
-//    }
-//
-//
-//    inner class RequestCall(protected val requestData: S): Call<R> {
-//
-//        override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
-//
-//        }
-//
-//        override suspend fun enqueueAwait(): R {
-//            return scope.async {
-//                while (true) {
-//                    val entry = responseChannel.receive()
-//                    if (entry.key == requestData) {
-//                        return@async entry.value
-//                    }
-//                }
-//                throw NoSuchElementException("cannot find match element, key is $requestData")
-//            }.await()
-//        }
-//
-//    }
 }
