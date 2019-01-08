@@ -2,8 +2,6 @@ package net.echobuffer
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.first
-import kotlinx.coroutines.channels.toSet
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -40,7 +38,6 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
             requestChannel.send(data)
         }
 
-
         return RequestCall(data)
     }
 
@@ -48,23 +45,34 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
         if (isStartedRequest.compareAndSet(false, true)) {
             scope.async {
                 while (true) {
-                    debugLog("start get requestChannel")
-                    val set = mutableSetOf<S>()
-                    val response = withTimeoutOrNull(lastTTL) { requestChannel.receive() }
-                    if (response == null) {
+                    //debugLog("start get requestChannel")
+
+                    val set = fetchRequests()
+                    if (set.isEmpty()) {
                         break
-                    } else {
-                        debugLog("start get requestChannel data $response")
-                        val resultMap = requestDelegate.request(response)
-                        for (entry in resultMap) {
-                            responseChannel.send(entry)
-                        }
-                        delay(lastTTL)
                     }
+                    val resultMap = requestDelegate.request(set)
+                    for (entry in resultMap) {
+                        responseChannel.send(entry)
+                    }
+                    delay(lastTTL)
                 }
                 isStartedRequest.compareAndSet(true, false)
             }
         }
+    }
+
+    private suspend fun fetchRequests(): Set<S> {
+        var recv: S?
+        val set = mutableSetOf<S>()
+        do {
+            recv =  requestChannel.poll()
+            recv?.let {
+                set.add(it)
+            }
+        } while (recv != null)
+        debugLog("start get requestChannel data $set")
+        return set
     }
 
 
