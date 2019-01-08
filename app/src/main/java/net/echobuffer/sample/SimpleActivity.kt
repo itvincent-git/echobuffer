@@ -19,7 +19,7 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
     private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
-            delay(2000)
+            delay(1000)
             val map = mutableMapOf<Long, UserInfo>()
             for (item in data) {
                 map[item] = UserInfo(item, "$item name")
@@ -53,7 +53,7 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
             val key = Random(System.currentTimeMillis()).nextLong(99999999)
             val call = echoBufferRequest.send(key)
             debugLog("send $key")
-            val userInfo = call.enqueue( {
+            call.enqueue( {
                 debugLog("response is $it")
             }, {
                 errorLog("response error", it)

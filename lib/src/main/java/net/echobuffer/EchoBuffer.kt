@@ -2,7 +2,8 @@ package net.echobuffer
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.channels.actor
+import kotlin.system.measureTimeMillis
 
 /**
  * EchoBuffer入口类
@@ -33,11 +34,37 @@ interface RequestDelegate<S, R> {
 
 class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>()
-    protected val requestChannel = Channel<S>()
     protected val responseChannel = Channel<Map.Entry<S, R>>()
     protected val scope = CoroutineScope( Job() + Dispatchers.IO)
-    protected val lastTTL = 100L
-    protected val isStartedRequest = AtomicBoolean(false)
+    protected var lastTTL = 100L
+    protected val actor = scope.actor<S> {
+        while (true) {
+            val set = mutableSetOf<S>()
+            fetchItemWithTimeout(set, channel)
+            lastTTL = measureTimeMillis {
+                val resultMap = requestDelegate.request(set)
+                for (entry in resultMap) {
+                    responseChannel.send(entry)
+                }
+            }
+            debugLog("update lastTTL: $lastTTL")
+        }
+    }
+
+    private suspend fun fetchItemWithTimeout(set: MutableSet<S>, channel: Channel<S>){
+        fetchItem(set, channel)
+        withTimeoutOrNull(lastTTL) {
+            while (true) {
+                fetchItem(set, channel)
+            }
+        }
+    }
+
+    private suspend fun fetchItem(set: MutableSet<S>, channel: Channel<S>) {
+        val item = channel.receive()
+        set.add(item)
+        debugLog("actor receive $item")
+    }
 
     override fun send(data: S): Call<R> {
         val cacheValue = cache[data]
@@ -45,49 +72,13 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
             return CacheCall(cacheValue)
         }
         scope.async {
-            requestChannel.offer(data)
+            actor.send(data)
             debugLog("after send")
-            startRequest()
         }
         return RequestCall(data)
     }
 
-    private fun startRequest() {
-        if (isStartedRequest.compareAndSet(false, true)) {
-            scope.async {
-                while (true) {
-                    //debugLog("start get requestChannel")
-                    val set = fetchRequests()
-                    if (set.isEmpty()) {
-                        break
-                    }
-                    val resultMap = requestDelegate.request(set)
-                    for (entry in resultMap) {
-                        responseChannel.send(entry)
-                    }
-                    delay(lastTTL)
-                }
-                isStartedRequest.compareAndSet(true, false)
-            }
-        }
-    }
-
-    private fun fetchRequests(): Set<S> {
-        var recv: S?
-        val set = mutableSetOf<S>()
-        do {
-            recv =  requestChannel.poll()
-            recv?.let {
-                set.add(it)
-            }
-        } while (recv != null)
-        debugLog("start get requestChannel data $set")
-        return set
-    }
-
-
     inner class RequestCall(protected val requestData: S): Call<R> {
-
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
 
         }
@@ -103,6 +94,75 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
                 throw NoSuchElementException("cannot find match element, key is $requestData")
             }.await()
         }
-
     }
+
+
+    //=============
+
+//    override fun send(data: S): Call<R> {
+//        val cacheValue = cache[data]
+//        if (cacheValue != null) {
+//            return CacheCall(cacheValue)
+//        }
+//        scope.async {
+//            requestChannel.offer(data)
+//            debugLog("after send")
+//            startRequest()
+//        }
+//        return RequestCall(data)
+//    }
+//
+//    private fun startRequest() {
+//        if (isStartedRequest.compareAndSet(false, true)) {
+//            scope.async {
+//                while (true) {
+//                    //debugLog("start get requestChannel")
+//                    val set = fetchRequests()
+//                    if (set.isEmpty()) {
+//                        break
+//                    }
+//                    val resultMap = requestDelegate.request(set)
+//                    for (entry in resultMap) {
+//                        responseChannel.send(entry)
+//                    }
+//                    delay(lastTTL)
+//                }
+//                isStartedRequest.compareAndSet(true, false)
+//            }
+//        }
+//    }
+//
+//    private fun fetchRequests(): Set<S> {
+//        var recv: S?
+//        val set = mutableSetOf<S>()
+//        do {
+//            recv =  requestChannel.poll()
+//            recv?.let {
+//                set.add(it)
+//            }
+//        } while (recv != null)
+//        debugLog("start get requestChannel data $set")
+//        return set
+//    }
+//
+//
+//    inner class RequestCall(protected val requestData: S): Call<R> {
+//
+//        override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
+//
+//        }
+//
+//        override suspend fun enqueueAwait(): R {
+//            return scope.async {
+//                while (true) {
+//                    val entry = responseChannel.receive()
+//                    if (entry.key == requestData) {
+//                        return@async entry.value
+//                    }
+//                }
+//                throw NoSuchElementException("cannot find match element, key is $requestData")
+//            }.await()
+//        }
+//
+//    }
 }
