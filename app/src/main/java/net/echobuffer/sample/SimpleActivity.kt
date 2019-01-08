@@ -1,11 +1,10 @@
 package net.echobuffer.sample
 
-import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
+import android.support.v7.app.AppCompatActivity
 import kotlinx.android.synthetic.main.activity_simple.*
 import kotlinx.coroutines.*
-import net.echobuffer.RealEchoBuffer
+import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
 import net.echobuffer.errorLog
 import net.echobuffer.sample.util.debugLog
@@ -14,14 +13,12 @@ import kotlin.random.Random
 
 class SimpleActivity : AppCompatActivity(), CoroutineScope {
     override val coroutineContext: CoroutineContext
-        get() = Job() + Dispatchers.Default + CoroutineExceptionHandler { context, throwable ->
-            Log.e("CoroutineException", "Coroutine exception occurred", throwable)
-        }
+        get() = Job() + Dispatchers.Default
 
 
-    val echoBuffer = RealEchoBuffer(object: RequestDelegate<Long, UserInfo>{
+    private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
-            debugLog("request is $data")
+            debugLog("createRequest is $data")
             delay(2000)
             val map = mutableMapOf<Long, UserInfo>()
             for (item in data) {
@@ -35,18 +32,33 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_simple)
 
-        send_btn.setOnClickListener {
+        send_wait_btn.setOnClickListener {
             val key = Random(System.currentTimeMillis()).nextLong(99999999)
-            val call = echoBuffer.send(key)
-            debugLog("send $key")
+            val call = echoBufferRequest.send(key)
+            debugLog("enqueueAwait $key")
             launch {
                 try {
                     val userInfo = call.enqueueAwait()
+                    withContext(Dispatchers.Main) {
+                        //do something in UI
+                    }
                     debugLog("response is $userInfo")
                 } catch (t: Throwable) {
                     errorLog("response error", t)
                 }
             }
+        }
+
+        send_enquene_btn.setOnClickListener {
+            val key = Random(System.currentTimeMillis()).nextLong(99999999)
+            val call = echoBufferRequest.send(key)
+            debugLog("send $key")
+            val userInfo = call.enqueue( {
+                debugLog("response is $it")
+            }, {
+                errorLog("response error", it)
+            })
+
         }
     }
 }

@@ -5,20 +5,33 @@ import kotlinx.coroutines.channels.Channel
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- *
+ * EchoBuffer入口类
  * @author zhongyongsheng
  */
-interface EchoBuffer<S, R> {
+object EchoBuffer {
+    /**
+     * 构建request，用于发送数据
+     */
+    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
+        return RealEchoBufferRequest(requestDelegate)
+    }
+}
 
+/**
+ * 发送数据，返回Call
+ */
+interface EchoBufferRequest<S, R> {
     fun send(data: S): Call<R>
 }
 
+/**
+ * EchoBuffer优化后，实际批量请求数据的接口
+ */
 interface RequestDelegate<S, R> {
-
     suspend fun request(data: Set<S>): Map<S, R>
 }
 
-class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>): EchoBuffer<S, R> {
+class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>()
     protected val requestChannel = Channel<S>()
     protected val responseChannel = Channel<Map.Entry<S, R>>()
@@ -31,13 +44,11 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
         if (cacheValue != null) {
             return CacheCall(cacheValue)
         }
-
-        startRequest()
-
         scope.async {
-            requestChannel.send(data)
+            requestChannel.offer(data)
+            debugLog("after send")
+            startRequest()
         }
-
         return RequestCall(data)
     }
 
@@ -46,7 +57,6 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
             scope.async {
                 while (true) {
                     //debugLog("start get requestChannel")
-
                     val set = fetchRequests()
                     if (set.isEmpty()) {
                         break
@@ -62,7 +72,7 @@ class RealEchoBuffer<S, R>(protected val requestDelegate: RequestDelegate<S, R>)
         }
     }
 
-    private suspend fun fetchRequests(): Set<S> {
+    private fun fetchRequests(): Set<S> {
         var recv: S?
         val set = mutableSetOf<S>()
         do {
