@@ -1,6 +1,7 @@
 package net.echobuffer
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
 import kotlin.system.measureTimeMillis
@@ -38,10 +39,10 @@ interface RequestDelegate<S, R> {
 
 class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>()
-    protected val responseChannel = Channel<Map.Entry<S, R>>()
+    protected val responseChannel = BroadcastChannel<Map.Entry<S, R>>(10)
     protected val scope = CoroutineScope( Job() + Dispatchers.IO)
     protected var lastTTL = 100L
-    protected val actor = scope.actor<S> {
+    protected val sendActor = scope.actor<S>(capacity = 5) {
         while (true) {
             val set = mutableSetOf<S>()
             fetchItemWithTimeout(set, channel)
@@ -68,7 +69,7 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
     private suspend fun fetchItem(set: MutableSet<S>, channel: Channel<S>) {
         val item = channel.receive()
         set.add(item)
-        echoLog.d("actor receive $item")
+        echoLog.d("sendActor receive $item")
     }
 
     override fun send(data: S): Call<R> {
@@ -77,20 +78,21 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
             echoLog.d("hit the cache")
             return CacheCall(cacheValue)
         }
+
+        val call = RequestCall(data)
         scope.async {
-            actor.send(data)
+            sendActor.send(data)
         }
-        return RequestCall(data)
+        return call
     }
 
     inner class RequestCall(protected val requestData: S): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.async {
-                while (true) {
-                    val entry = responseChannel.receive()
+                var receiveChannel = responseChannel.openSubscription()
+                for (entry in receiveChannel) {
                     if (entry.key == requestData) {
                         success(entry.value)
-                        return@async
                     }
                 }
                 error(NoSuchElementException("cannot find match element, key is $requestData"))
@@ -99,8 +101,8 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
 
         override suspend fun enqueueAwait(): R {
             return scope.async {
-                while (true) {
-                    val entry = responseChannel.receive()
+                var receiveChannel = responseChannel.openSubscription()
+                for (entry in receiveChannel) {
                     if (entry.key == requestData) {
                         return@async entry.value
                     }
