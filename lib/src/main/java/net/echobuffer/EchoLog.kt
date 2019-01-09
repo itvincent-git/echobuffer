@@ -6,14 +6,27 @@ import android.util.Log
  * Created by zhongyongsheng on 2019/1/7.
  */
 const val TAG = "EchoLog"
-const val ISDEBUG = true
-
-fun debugLog(msg: String) {
-    if (ISDEBUG) {
-        Log.i(TAG, "[${Thread.currentThread().name}] $msg")
+internal var echoLog = object : EchoLogApi {
+    override fun enableLog(): Boolean {
+        return true
     }
+
+    override fun d(msg: String) {
+        if (enableLog()) {
+            Log.i(TAG, "[${Thread.currentThread().name}] $msg")
+        }
+    }
+
+    override fun e(message: String, throwable: Throwable) {
+        if (enableLog()) {
+            Log.e(TAG, "[${Thread.currentThread().name}] ${message}", throwable)
+        }
+    }
+
 }
 
-fun errorLog(message: String, throwable: Throwable) {
-    Log.e(TAG, "[${Thread.currentThread().name}] ${message}", throwable)
+interface EchoLogApi {
+    fun d(msg: String)
+    fun e(message: String, throwable: Throwable)
+    fun enableLog(): Boolean
 }

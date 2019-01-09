@@ -16,6 +16,10 @@ object EchoBuffer {
     fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
         return RealEchoBufferRequest(requestDelegate)
     }
+
+    fun setLogImplementation(logImpl: EchoLogApi) {
+        echoLog = logImpl
+    }
 }
 
 /**
@@ -44,10 +48,11 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
             lastTTL = measureTimeMillis {
                 val resultMap = requestDelegate.request(set)
                 for (entry in resultMap) {
+                    cache.put(entry.key, entry.value)
                     responseChannel.send(entry)
                 }
             }
-            debugLog("update lastTTL: $lastTTL")
+            echoLog.d("update lastTTL: $lastTTL")
         }
     }
 
@@ -63,17 +68,17 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
     private suspend fun fetchItem(set: MutableSet<S>, channel: Channel<S>) {
         val item = channel.receive()
         set.add(item)
-        debugLog("actor receive $item")
+        echoLog.d("actor receive $item")
     }
 
     override fun send(data: S): Call<R> {
         val cacheValue = cache[data]
         if (cacheValue != null) {
+            echoLog.d("hit the cache")
             return CacheCall(cacheValue)
         }
         scope.async {
             actor.send(data)
-            //debugLog("after send")
         }
         return RequestCall(data)
     }

@@ -6,8 +6,8 @@ import kotlinx.android.synthetic.main.activity_simple.*
 import kotlinx.coroutines.*
 import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
-import net.echobuffer.errorLog
 import net.echobuffer.sample.util.debugLog
+import net.echobuffer.sample.util.errorLog
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
@@ -32,8 +32,9 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_simple)
 
+        val randomCeil = 9L
         send_wait_btn.setOnClickListener {
-            val key = Random(System.currentTimeMillis()).nextLong(99999999)
+            val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)
             debugLog("enqueueAwait $key")
             launch {
@@ -50,7 +51,7 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
         }
 
         send_enquene_btn.setOnClickListener {
-            val key = Random(System.currentTimeMillis()).nextLong(99999999)
+            val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)
             debugLog("send $key")
             call.enqueue( {

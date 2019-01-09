@@ -1,13 +1,18 @@
 package net.echobuffer
 
-import kotlinx.coroutines.suspendCancellableCoroutine
-
 /**
- *
+ * The return object of then send method
  * @author zhongyongsheng
  */
 interface Call<R> {
+    /**
+     * enqueue the request，callback invoke when success or error，callback will run in [non UI] thread
+     */
     fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit)
+
+    /**
+     * enqueue the request, and await until success, or throw exception when error
+     */
     suspend fun enqueueAwait(): R
 }
 
@@ -22,6 +27,5 @@ class CacheCall<R>(val cacheValue: R): Call<R> {
     override suspend fun enqueueAwait(): R {
         return cacheValue
     }
-
 }
 
