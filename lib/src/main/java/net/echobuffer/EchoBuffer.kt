@@ -14,9 +14,13 @@ import kotlin.system.measureTimeMillis
 object EchoBuffer {
     /**
      * 构建request，用于发送数据
+     *
+     * @param requestDelegate
+     * @param capacity
+     * @param requestIntervalRange
      */
-    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>, capacity: Int = 10): EchoBufferRequest<S, R> {
-        return RealEchoBufferRequest(requestDelegate, capacity)
+    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>, capacity: Int = 10, requestIntervalRange: LongRange = LongRange(100L, 1000L)): EchoBufferRequest<S, R> {
+        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -38,8 +42,9 @@ interface RequestDelegate<S, R> {
     suspend fun request(data: Set<S>): Map<S, R>
 }
 
-class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
-                                  capacity: Int = 10): EchoBufferRequest<S, R> {
+private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
+                                  capacity: Int,
+                                  requestIntervalRange: LongRange): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>()
     protected val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     protected val scope = CoroutineScope( Job() + Dispatchers.IO)
@@ -49,14 +54,15 @@ class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S
             val set = mutableSetOf<S>()
             fetchItemWithTimeout(set, channel)
             var resultMap: Map<S, R>? = null
-            lastTTL = measureTimeMillis {
+            val realTTL = measureTimeMillis {
                 try { resultMap = requestDelegate.request(set) } finally { }
             }
             resultMap?.let {
                 cache.putAll(it)
                 responseChannel.send(it)
             }
-            echoLog.d("update lastTTL: $lastTTL")
+            lastTTL = requestIntervalRange.closeValueInRange(realTTL)
+            echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
         }
     }
 
@@ -114,4 +120,13 @@ class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S
         }
     }
 
+}
+
+/**
+ * value在当前范围内则返回，否则返回边界值
+ */
+fun LongRange.closeValueInRange(value: Long): Long {
+    if (value < start) return start
+    else if (value > endInclusive) return endInclusive
+    else return value
 }
