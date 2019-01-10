@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
+import kotlinx.coroutines.channels.consume
 import kotlin.system.measureTimeMillis
 
 /**
@@ -90,25 +91,27 @@ class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S
     inner class RequestCall(private val requestData: S): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.async {
-                var receiveChannel = responseChannel.openSubscription()
-                for (entry in receiveChannel) {
-                    if (entry.key == requestData) {
-                        success(entry.value)
+                responseChannel.openSubscription().consume {
+                    for (entry in this) {
+                        if (entry.key == requestData) {
+                            success(entry.value)
+                        }
                     }
+                    error(NoSuchElementException("cannot find match element, key is $requestData"))
                 }
-                error(NoSuchElementException("cannot find match element, key is $requestData"))
             }
         }
 
         @Throws(NoSuchElementException::class)
         override suspend fun enqueueAwait(): R {
-            var receiveChannel = responseChannel.openSubscription()
-            for (entry in receiveChannel) {
-                if (entry.key == requestData) {
-                    return entry.value
+            responseChannel.openSubscription().consume {
+                for (entry in this) {
+                    if (entry.key == requestData) {
+                        return entry.value
+                    }
                 }
+                throw NoSuchElementException("cannot find match element, key is $requestData")
             }
-            throw NoSuchElementException("cannot find match element, key is $requestData")
         }
     }
 
