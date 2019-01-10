@@ -41,19 +41,20 @@ interface RequestDelegate<S, R> {
 class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
                                   capacity: Int = 10): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>()
-    protected val responseChannel = BroadcastChannel<Map.Entry<S, R>>(capacity)
+    protected val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     protected val scope = CoroutineScope( Job() + Dispatchers.IO)
     protected var lastTTL = 100L
     protected val sendActor = scope.actor<S>(capacity = capacity) {
         while (true) {
             val set = mutableSetOf<S>()
             fetchItemWithTimeout(set, channel)
+            var resultMap: Map<S, R>? = null
             lastTTL = measureTimeMillis {
-                val resultMap = requestDelegate.request(set)
-                for (entry in resultMap) {
-                    cache.put(entry.key, entry.value)
-                    responseChannel.send(entry)
-                }
+                try { resultMap = requestDelegate.request(set) } finally { }
+            }
+            resultMap?.let {
+                cache.putAll(it)
+                responseChannel.send(it)
             }
             echoLog.d("update lastTTL: $lastTTL")
         }
@@ -92,10 +93,9 @@ class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.async {
                 responseChannel.openSubscription().consume {
-                    for (entry in this) {
-                        if (entry.key == requestData) {
-                            success(entry.value)
-                        }
+                    for (map in this) {
+                        val r = map[requestData]
+                        if (r != null) success(r) else continue
                     }
                     error(NoSuchElementException("cannot find match element, key is $requestData"))
                 }
@@ -105,13 +105,12 @@ class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S
         @Throws(NoSuchElementException::class)
         override suspend fun enqueueAwait(): R {
             responseChannel.openSubscription().consume {
-                for (entry in this) {
-                    if (entry.key == requestData) {
-                        return entry.value
-                    }
+                for (map in this) {
+                    val r = map[requestData]
+                    if (r != null) return r else continue
                 }
-                throw NoSuchElementException("cannot find match element, key is $requestData")
             }
+            throw NoSuchElementException("cannot find match element, key is $requestData")
         }
     }
 
