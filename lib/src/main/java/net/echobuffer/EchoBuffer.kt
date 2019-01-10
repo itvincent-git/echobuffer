@@ -86,7 +86,7 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
         return call
     }
 
-    inner class RequestCall(protected val requestData: S): Call<R> {
+    inner class RequestCall(private val requestData: S): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.async {
                 var receiveChannel = responseChannel.openSubscription()
@@ -99,16 +99,15 @@ class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate
             }
         }
 
+        @Throws(NoSuchElementException::class)
         override suspend fun enqueueAwait(): R {
-            return scope.async {
-                var receiveChannel = responseChannel.openSubscription()
-                for (entry in receiveChannel) {
-                    if (entry.key == requestData) {
-                        return@async entry.value
-                    }
+            var receiveChannel = responseChannel.openSubscription()
+            for (entry in receiveChannel) {
+                if (entry.key == requestData) {
+                    return entry.value
                 }
-                throw NoSuchElementException("cannot find match element, key is $requestData")
-            }.await()
+            }
+            throw NoSuchElementException("cannot find match element, key is $requestData")
         }
     }
 
