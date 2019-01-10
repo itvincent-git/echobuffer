@@ -14,8 +14,8 @@ object EchoBuffer {
     /**
      * 构建request，用于发送数据
      */
-    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
-        return RealEchoBufferRequest(requestDelegate)
+    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>, capacity: Int = 10): EchoBufferRequest<S, R> {
+        return RealEchoBufferRequest(requestDelegate, capacity)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -37,12 +37,13 @@ interface RequestDelegate<S, R> {
     suspend fun request(data: Set<S>): Map<S, R>
 }
 
-class RealEchoBufferRequest<S, R>(protected val requestDelegate: RequestDelegate<S, R>): EchoBufferRequest<S, R> {
+class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
+                                  capacity: Int = 10): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>()
-    protected val responseChannel = BroadcastChannel<Map.Entry<S, R>>(10)
+    protected val responseChannel = BroadcastChannel<Map.Entry<S, R>>(capacity)
     protected val scope = CoroutineScope( Job() + Dispatchers.IO)
     protected var lastTTL = 100L
-    protected val sendActor = scope.actor<S>(capacity = 5) {
+    protected val sendActor = scope.actor<S>(capacity = capacity) {
         while (true) {
             val set = mutableSetOf<S>()
             fetchItemWithTimeout(set, channel)
