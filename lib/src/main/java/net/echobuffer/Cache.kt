@@ -16,8 +16,7 @@ interface Cache<K, V> {
 /**
  * real implementation
  */
-class RealCache<K, V>(): Cache<K, V> {
-    private val maxCacheSize = 256
+class RealCache<K, V>(maxCacheSize: Int): Cache<K, V> {
     private val cache = LruCache<K, V>(maxCacheSize)
 
     override fun put(key: K, value: V?) {

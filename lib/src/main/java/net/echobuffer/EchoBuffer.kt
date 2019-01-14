@@ -19,8 +19,11 @@ object EchoBuffer {
      * @param capacity
      * @param requestIntervalRange
      */
-    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>, capacity: Int = 10, requestIntervalRange: LongRange = LongRange(100L, 1000L)): EchoBufferRequest<S, R> {
-        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange)
+    fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>,
+                             capacity: Int = 10,
+                             requestIntervalRange: LongRange = LongRange(100L, 1000L),
+                             maxCacheSize: Int = 256): EchoBufferRequest<S, R> {
+        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange, maxCacheSize)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -44,8 +47,9 @@ interface RequestDelegate<S, R> {
 
 private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
                                   capacity: Int,
-                                  requestIntervalRange: LongRange): EchoBufferRequest<S, R> {
-    protected val cache = RealCache<S, R>()
+                                  requestIntervalRange: LongRange,
+                                  maxCacheSize: Int): EchoBufferRequest<S, R> {
+    protected val cache = RealCache<S, R>(maxCacheSize)
     protected val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     protected val scope = CoroutineScope( Job() + Dispatchers.IO)
     protected var lastTTL = 100L

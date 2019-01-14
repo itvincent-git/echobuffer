@@ -1,6 +1,7 @@
 package net.echobuffer
 
 import android.util.Log
+import net.stripe.lib.BuildConfig
 
 const val TAG = "EchoLog"
 /**
@@ -9,7 +10,7 @@ const val TAG = "EchoLog"
  */
 internal var echoLog = object : EchoLogApi {
     override fun enableLog(): Boolean {
-        return true
+        return BuildConfig.DEBUG
     }
 
     override fun d(msg: String) {
