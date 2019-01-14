@@ -8,7 +8,7 @@ import kotlinx.coroutines.channels.consume
 import kotlin.system.measureTimeMillis
 
 /**
- * EchoBuffer入口类
+ * EchoBuffer entry
  * @author zhongyongsheng
  */
 object EchoBuffer {
@@ -29,14 +29,14 @@ object EchoBuffer {
 }
 
 /**
- * 发送数据，返回Call
+ * send request and return Call
  */
 interface EchoBufferRequest<S, R> {
     fun send(data: S): Call<R>
 }
 
 /**
- * EchoBuffer优化后，实际批量请求数据的接口
+ * The interface for the actual batch request data is optimized by EchoBuffer
  */
 interface RequestDelegate<S, R> {
     suspend fun request(data: Set<S>): Map<S, R>?
@@ -123,7 +123,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
 }
 
 /**
- * value在当前范围内则返回，否则返回边界值
+ * Value returns if it is within the current range, otherwise returns the boundary value
  */
 fun LongRange.closeValueInRange(value: Long): Long {
     if (value < start) return start

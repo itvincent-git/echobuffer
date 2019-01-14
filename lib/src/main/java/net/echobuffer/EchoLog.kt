@@ -2,10 +2,11 @@ package net.echobuffer
 
 import android.util.Log
 
+const val TAG = "EchoLog"
 /**
+ * User-defined logging implementation
  * Created by zhongyongsheng on 2019/1/7.
  */
-const val TAG = "EchoLog"
 internal var echoLog = object : EchoLogApi {
     override fun enableLog(): Boolean {
         return true
@@ -25,6 +26,9 @@ internal var echoLog = object : EchoLogApi {
 
 }
 
+/**
+ * User-defined logging interface
+ */
 interface EchoLogApi {
     fun d(msg: String)
     fun e(message: String, throwable: Throwable)
