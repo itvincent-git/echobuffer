@@ -42,6 +42,11 @@ interface EchoBufferRequest<S, R> {
  * The interface for the actual batch request data is optimized by EchoBuffer
  */
 interface RequestDelegate<S, R> {
+
+    /**
+     * request use data as parameter.
+     * Returns Map, key for data, and value for return value
+     */
     suspend fun request(data: Set<S>): Map<S, R>?
 }
 
