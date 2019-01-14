@@ -39,7 +39,7 @@ interface EchoBufferRequest<S, R> {
  * EchoBuffer优化后，实际批量请求数据的接口
  */
 interface RequestDelegate<S, R> {
-    suspend fun request(data: Set<S>): Map<S, R>
+    suspend fun request(data: Set<S>): Map<S, R>?
 }
 
 private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
