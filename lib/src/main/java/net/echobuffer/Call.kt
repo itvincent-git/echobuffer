@@ -16,9 +16,7 @@ interface Call<R> {
     suspend fun enqueueAwait(): R
 }
 
-class CacheCall<R>(val cacheValue: R): Call<R> {
-    private var success: ((R) -> Unit)? = null
-    private var error: ((Throwable) -> Unit)? = null
+class CacheCall<R>(private val cacheValue: R): Call<R> {
 
     override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
         return success(cacheValue)
