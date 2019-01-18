@@ -15,13 +15,13 @@ internal var echoLog = object : EchoLogApi {
 
     override fun d(msg: String) {
         if (enableLog()) {
-            Log.i(TAG, "[${Thread.currentThread().name}] $msg")
+            Log.i(TAG, "$msg [${Thread.currentThread().name}]")
         }
     }
 
     override fun e(message: String, throwable: Throwable) {
         if (enableLog()) {
-            Log.e(TAG, "[${Thread.currentThread().name}] ${message}", throwable)
+            Log.e(TAG, "${message} [${Thread.currentThread().name}]", throwable)
         }
     }
 

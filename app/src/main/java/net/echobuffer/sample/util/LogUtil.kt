@@ -10,11 +10,11 @@ import android.widget.Toast
 const val TAG = "LogUtil"
 
 fun debugLog(msg: String) {
-    Log.i(TAG, "[${Thread.currentThread().name}] $msg")
+    Log.i(TAG, "$msg [${Thread.currentThread().name}]")
 }
 
 fun errorLog(message: String, throwable: Throwable) {
-    Log.e(TAG, "[${Thread.currentThread().name}] ${message}", throwable)
+    Log.e(TAG, "${message} [${Thread.currentThread().name}]", throwable)
 }
 
 fun showToast(context: Context, text: String) {
