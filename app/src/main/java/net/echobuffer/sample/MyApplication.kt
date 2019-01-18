@@ -9,6 +9,6 @@ class MyApplication: Application() {
     override fun onCreate() {
         super.onCreate()
         //use CommonPool instead of DefaultScheduler
-        System.setProperty("kotlinx.coroutines.scheduler", "off")
+        //System.setProperty("kotlinx.coroutines.scheduler", "off")
     }
 }

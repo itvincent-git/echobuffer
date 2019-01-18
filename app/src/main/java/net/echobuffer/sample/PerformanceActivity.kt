@@ -1,6 +1,6 @@
 package net.echobuffer.sample
 
-import android.support.v7.app.AppCompatActivity
+import android.arch.lifecycle.ViewModelProviders
 import android.os.Bundle
 import kotlinx.android.synthetic.main.activity_performance.*
 import kotlinx.coroutines.*
@@ -8,13 +8,12 @@ import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
 import net.echobuffer.sample.util.debugLog
 import net.echobuffer.sample.util.errorLog
-import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
-class PerformanceActivity : AppCompatActivity(), CoroutineScope {
-    override val coroutineContext: CoroutineContext
-        get() = Job() + Dispatchers.Default
-
+class PerformanceActivity : BaseActivity() {
+    val randomCeil = 100L
+    val random = Random(System.currentTimeMillis())
+    var viewModel: MyViewModel? = null
 
     private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
@@ -31,6 +30,7 @@ class PerformanceActivity : AppCompatActivity(), CoroutineScope {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_performance)
+        viewModel = ViewModelProviders.of(this).get(MyViewModel::class.java)
 
         repeat_btn.setOnClickListener {
             val randomCeil = 10000L
@@ -53,26 +53,16 @@ class PerformanceActivity : AppCompatActivity(), CoroutineScope {
         }
 
         res_btn.setOnClickListener {
-            val randomCeil = 1000L
-            val random = Random(System.currentTimeMillis())
-            repeat(10000) {
-                val key = random.nextLong(randomCeil)
-                launch {
-                    delay(it * 500L)
-                    try {
-                        //withTimeout(2000) {
-                            val call = echoBufferRequest.send(key)
-                            debugLog("test2 key:$key")
-                            val userInfo = call.enqueueAwait()
-                            withContext(Dispatchers.Main) {
-                                debugLog("test2 response is $userInfo")
-                            }
-                        //}
-                    } catch (t: Throwable) {
-                        errorLog("test2 response error $key", t)
-                    }
-                }
-            }
+            it.postDelayed(runnable, 500)
+        }
+    }
+
+
+    val runnable = object: Runnable {
+        override fun run() {
+            viewModel?.launchTest()
+            res_btn.removeCallbacks(this)
+            res_btn.postDelayed(this, 500)
         }
     }
 }

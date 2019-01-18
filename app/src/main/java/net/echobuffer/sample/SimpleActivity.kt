@@ -11,10 +11,7 @@ import net.echobuffer.sample.util.errorLog
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
-class SimpleActivity : AppCompatActivity(), CoroutineScope {
-    val job = Job()
-    override val coroutineContext: CoroutineContext
-        get() = job + Dispatchers.Default
+class SimpleActivity : BaseActivity() {
 
     private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
@@ -63,10 +60,6 @@ class SimpleActivity : AppCompatActivity(), CoroutineScope {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        job.cancel()
-    }
 }
 
 data class UserInfo(val uid: Long, val name: String)

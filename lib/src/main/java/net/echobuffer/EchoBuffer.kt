@@ -56,7 +56,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                                   maxCacheSize: Int): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>(maxCacheSize)
     protected val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
-    protected val scope = CoroutineScope( Job() + Dispatchers.IO)
+    protected val scope = CoroutineScope( Job() + Dispatchers.Default)
     protected var lastTTL = 100L
     protected val sendActor = scope.actor<S>(capacity = capacity) {
         while (true) {
@@ -68,7 +68,13 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
             }
             resultMap?.let {
                 cache.putAll(it)
-                responseChannel.send(it)
+                launch {
+                    try {
+                        responseChannel.send(it)
+                    } catch (t: Throwable) {
+                        echoLog.e("responseChannel send error", t)
+                    }
+                }
             }
             lastTTL = requestIntervalRange.closeValueInRange(realTTL)
             echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
