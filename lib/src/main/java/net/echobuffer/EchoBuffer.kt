@@ -51,33 +51,31 @@ interface RequestDelegate<S, R> {
 }
 
 private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
-                                  capacity: Int,
-                                  requestIntervalRange: LongRange,
-                                  maxCacheSize: Int): EchoBufferRequest<S, R> {
+                                          capacity: Int,
+                                          requestIntervalRange: LongRange,
+                                          maxCacheSize: Int): EchoBufferRequest<S, R> {
     protected val cache = RealCache<S, R>(maxCacheSize)
     protected val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
-    protected val scope = CoroutineScope( Job() + Dispatchers.Default)
+    protected val scope = CoroutineScope( Job() + Dispatchers.IO)
     protected var lastTTL = 100L
     protected val sendActor = scope.actor<S>(capacity = capacity) {
         while (true) {
-            val set = mutableSetOf<S>()
-            fetchItemWithTimeout(set, channel)
-            var resultMap: Map<S, R>? = null
-            val realTTL = measureTimeMillis {
-                try { resultMap = requestDelegate.request(set) } finally { }
-            }
-            resultMap?.let {
-                cache.putAll(it)
-                launch {
-                    try {
-                        responseChannel.send(it)
-                    } catch (t: Throwable) {
-                        echoLog.e("responseChannel send error", t)
-                    }
+            try {
+                val set = mutableSetOf<S>()
+                fetchItemWithTimeout(set, channel)
+                var resultMap: Map<S, R>? = null
+                val realTTL = measureTimeMillis {
+                    resultMap = requestDelegate.request(set)
                 }
+                resultMap?.let {
+                    cache.putAll(it)
+                    responseChannel.send(it)
+                }
+                lastTTL = requestIntervalRange.closeValueInRange(realTTL)
+                echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
+            } catch (t: Throwable) {
+                echoLog.e("actor error", t)
             }
-            lastTTL = requestIntervalRange.closeValueInRange(realTTL)
-            echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
         }
     }
 
@@ -104,7 +102,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         }
 
         val call = RequestCall(data)
-        scope.async {
+        scope.launch {
             sendActor.send(data)
         }
         return call
@@ -112,11 +110,16 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
 
     inner class RequestCall(private val requestData: S): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
-            scope.async {
+            scope.launch {
                 responseChannel.openSubscription().consume {
                     for (map in this) {
                         val r = map[requestData]
-                        if (r != null) success(r) else continue
+                        if (r != null) {
+                            success(r)
+                            return@launch
+                        } else {
+                            continue
+                        }
                     }
                     error(NoSuchElementException("cannot find match element, key is $requestData"))
                 }
