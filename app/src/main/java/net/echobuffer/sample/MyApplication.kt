@@ -10,5 +10,8 @@ class MyApplication: Application() {
         super.onCreate()
         //use CommonPool instead of DefaultScheduler
         //System.setProperty("kotlinx.coroutines.scheduler", "off")
+
+        //add coroutine number to the threadname
+        System.setProperty("kotlinx.coroutines.debug", if (BuildConfig.DEBUG) "on" else "off")
     }
 }
