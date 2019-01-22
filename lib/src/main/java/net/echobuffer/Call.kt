@@ -13,16 +13,16 @@ interface Call<R> {
     /**
      * enqueue the request, and await until success, or throw exception when error
      */
-    suspend fun enqueueAwait(): R
+    suspend fun enqueueAwaitOrNull(): R?
 }
 
 class CacheCall<R>(private val cacheValue: R): Call<R> {
 
     override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
-        return success(cacheValue)
+        success(cacheValue)
     }
 
-    override suspend fun enqueueAwait(): R {
+    override suspend fun enqueueAwaitOrNull(): R? {
         return cacheValue
     }
 }

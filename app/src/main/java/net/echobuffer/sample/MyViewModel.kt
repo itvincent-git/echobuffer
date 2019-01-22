@@ -33,13 +33,13 @@ class MyViewModel: ViewModel() {
             val key2 = random.nextLong(randomCeil)
             try {
                 //withTimeout(2000) {
-                val userInfo = echoBufferRequest.send(key).enqueueAwait()
+                val userInfo = echoBufferRequest.send(key).enqueueAwaitOrNull()
                 debugLog("test2 key:$key")
                 withContext(Dispatchers.Main) {
                     debugLog("test2 response is $userInfo")
                 }
 
-                val userInfo2 = echoBufferRequest.send(key2).enqueueAwait()
+                val userInfo2 = echoBufferRequest.send(key2).enqueueAwaitOrNull()
                 debugLog("test2 key2:$key2")
                 withContext(Dispatchers.Main) {
                     debugLog("test2 response2 is $userInfo2")

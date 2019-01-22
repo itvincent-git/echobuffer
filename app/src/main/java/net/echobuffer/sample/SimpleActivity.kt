@@ -16,7 +16,8 @@ class SimpleActivity : BaseActivity() {
     private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
-            delay(300)
+//            delay(999999999999999999)
+            delay(500)
             val map = mutableMapOf<Long, UserInfo>()
             for (item in data) {
                 map[item] = UserInfo(item, "$item name")
@@ -29,14 +30,14 @@ class SimpleActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_simple)
 
-        val randomCeil = 9L
+        val randomCeil = 20L
         send_wait_btn.setOnClickListener {
             val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)
             debugLog("enqueueAwait $key")
             launch {
                 try {
-                    val userInfo = call.enqueueAwait()
+                    val userInfo = call.enqueueAwaitOrNull()
                     withContext(Dispatchers.Main) {
                         //do something in UI
                     }

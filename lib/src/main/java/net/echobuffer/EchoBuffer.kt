@@ -1,10 +1,7 @@
 package net.echobuffer
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BroadcastChannel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.channels.consume
+import kotlinx.coroutines.channels.*
 import kotlin.system.measureTimeMillis
 
 /**
@@ -22,8 +19,9 @@ object EchoBuffer {
     fun <S, R> createRequest(requestDelegate: RequestDelegate<S, R>,
                              capacity: Int = 10,
                              requestIntervalRange: LongRange = LongRange(100L, 1000L),
-                             maxCacheSize: Int = 256): EchoBufferRequest<S, R> {
-        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange, maxCacheSize)
+                             maxCacheSize: Int = 256,
+                             requestTimeoutMs: Long = 3000): EchoBufferRequest<S, R> {
+        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange, maxCacheSize, requestTimeoutMs)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -36,6 +34,7 @@ object EchoBuffer {
  */
 interface EchoBufferRequest<S, R> {
     fun send(data: S): Call<R>
+    fun getCache(): Cache<S, R>
 }
 
 /**
@@ -53,45 +52,42 @@ interface RequestDelegate<S, R> {
 private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
                                           capacity: Int,
                                           requestIntervalRange: LongRange,
-                                          maxCacheSize: Int): EchoBufferRequest<S, R> {
-    protected val cache = RealCache<S, R>(maxCacheSize)
-    protected val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
-    protected val scope = CoroutineScope( Job() + Dispatchers.IO)
-    protected var lastTTL = 100L
-    protected val sendActor = scope.actor<S>(capacity = capacity) {
-        while (true) {
-            try {
-                val set = mutableSetOf<S>()
-                fetchItemWithTimeout(set, channel)
+                                          maxCacheSize: Int,
+                                          private val requestTimeoutMs: Long): EchoBufferRequest<S, R> {
+    private val cache = RealCache<S, R>(maxCacheSize)
+    private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
+    private val scope = CoroutineScope( Job() + Dispatchers.IO)
+    private var lastTTL = 100L
+    private val sendActor = scope.actor<S>(capacity = capacity) {
+        consume {
+            echoLog.d("start consume")
+            val set = mutableSetOf<S>()
+            while (true) {
+                if (set.isNotEmpty()) set.clear()
+                val e = channel.receive()
+                echoLog.d("add to set")
+                set.add(e)
+
+                withTimeoutOrNull(lastTTL) {
+                    for (e in this@consume) {
+                        echoLog.d("add to set with timeout")
+                        set.add(e)
+                    }
+                }
+
+                if (set.isEmpty()) continue
                 var resultMap: Map<S, R>? = null
                 val realTTL = measureTimeMillis {
-                    resultMap = requestDelegate.request(set)
+                    resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(set) }
                 }
                 resultMap?.let {
                     cache.putAll(it)
                     responseChannel.send(it)
                 }
-                lastTTL = requestIntervalRange.closeValueInRange(realTTL)
+                lastTTL = realTTL.coerceIn(requestIntervalRange)
                 echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
-            } catch (t: Throwable) {
-                echoLog.e("actor error", t)
             }
         }
-    }
-
-    private suspend fun fetchItemWithTimeout(set: MutableSet<S>, channel: Channel<S>){
-        fetchItem(set, channel)
-        withTimeoutOrNull(lastTTL) {
-            while (true) {
-                fetchItem(set, channel)
-            }
-        }
-    }
-
-    private suspend fun fetchItem(set: MutableSet<S>, channel: Channel<S>) {
-        val item = channel.receive()
-        set.add(item)
-        echoLog.d("sendActor receive $item")
     }
 
     override fun send(data: S): Call<R> {
@@ -101,50 +97,56 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
             return CacheCall(cacheValue)
         }
 
-        val call = RequestCall(data)
+        val call = RequestCall(data, requestTimeoutMs)
         scope.launch {
+            echoLog.d("sendActor send before ${requestDelegate}>$data")
             sendActor.send(data)
+            echoLog.d("sendActor sent")
         }
         return call
     }
 
-    inner class RequestCall(private val requestData: S): Call<R> {
+    inner class RequestCall(private val requestData: S,
+                            private val requestTimeoutMs: Long): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
-                responseChannel.openSubscription().consume {
-                    for (map in this) {
-                        val r = map[requestData]
-                        if (r != null) {
-                            success(r)
-                            return@launch
-                        } else {
-                            continue
+                try {
+                    withTimeout(requestTimeoutMs) {
+                        echoLog.d("launch start")
+                        responseChannel.openSubscription().consume {
+                            for (map in this) {
+                                echoLog.d("enqueue on consume $map")
+                                val r = map[requestData]
+                                if (r != null) {
+                                    success(r)
+                                    return@consume
+                                } else {
+                                    continue
+                                }
+                            }
+                            error(NoSuchElementException("cannot find match element, key is $requestData"))
                         }
+                        echoLog.d("launch end")
                     }
-                    error(NoSuchElementException("cannot find match element, key is $requestData"))
+                } catch (t: Throwable) {
+                    error(t)
                 }
             }
         }
 
-        @Throws(NoSuchElementException::class)
-        override suspend fun enqueueAwait(): R {
-            responseChannel.openSubscription().consume {
-                for (map in this) {
-                    val r = map[requestData]
-                    if (r != null) return r else continue
+        override suspend fun enqueueAwaitOrNull(): R? {
+            return withTimeoutOrNull(requestTimeoutMs) {
+                return@withTimeoutOrNull responseChannel.openSubscription().consume {
+                    for (map in this) {
+                        echoLog.d("enqueueAwait on consume $map")
+                        val r = map[requestData]
+                        if (r != null) return@consume r else continue
+                    }
+                    return@consume null
                 }
             }
-            throw NoSuchElementException("cannot find match element, key is $requestData")
         }
     }
 
-}
-
-/**
- * Value returns if it is within the current range, otherwise returns the boundary value
- */
-fun LongRange.closeValueInRange(value: Long): Long {
-    if (value < start) return start
-    else if (value > endInclusive) return endInclusive
-    else return value
+    override fun getCache(): Cache<S, R> = cache
 }

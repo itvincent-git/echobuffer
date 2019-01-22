@@ -42,7 +42,7 @@ class PerformanceActivity : BaseActivity() {
                 launch {
                     try {
                         withTimeout(2000) {
-                            val userInfo = call.enqueueAwait()
+                            val userInfo = call.enqueueAwaitOrNull()
                             debugLog("enqueueAwait response is $userInfo")
                         }
                     } catch (t: Throwable) {
