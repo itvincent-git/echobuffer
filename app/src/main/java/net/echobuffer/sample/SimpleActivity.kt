@@ -1,5 +1,6 @@
 package net.echobuffer.sample
 
+import android.arch.lifecycle.Observer
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import kotlinx.android.synthetic.main.activity_simple.*
@@ -16,8 +17,8 @@ class SimpleActivity : BaseActivity() {
     private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
-//            delay(999999999999999999)
-            delay(500)
+            delay(999999999999999999)
+//            delay(500)
             val map = mutableMapOf<Long, UserInfo>()
             for (item in data) {
                 map[item] = UserInfo(item, "$item name")
@@ -58,6 +59,15 @@ class SimpleActivity : BaseActivity() {
                 errorLog("enqueue response error", it)
             })
 
+        }
+
+        send_livedata_btn.setOnClickListener {
+            val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
+            val call = echoBufferRequest.send(key)
+            debugLog("enqueuelivedata send $key")
+            call.enqueueLiveData().observe(this, Observer {
+                debugLog("enqueuelivedata response is $it")
+            })
         }
     }
 

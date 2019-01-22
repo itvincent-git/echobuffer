@@ -1,7 +1,9 @@
 package net.echobuffer
 
+import android.arch.lifecycle.MutableLiveData
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
+import java.util.concurrent.TimeoutException
 import kotlin.system.measureTimeMillis
 
 /**
@@ -110,27 +112,9 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                             private val requestTimeoutMs: Long): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
-                try {
-                    withTimeout(requestTimeoutMs) {
-                        echoLog.d("launch start")
-                        responseChannel.openSubscription().consume {
-                            for (map in this) {
-                                echoLog.d("enqueue on consume $map")
-                                val r = map[requestData]
-                                if (r != null) {
-                                    success(r)
-                                    return@consume
-                                } else {
-                                    continue
-                                }
-                            }
-                            error(NoSuchElementException("cannot find match element, key is $requestData"))
-                        }
-                        echoLog.d("launch end")
-                    }
-                } catch (t: Throwable) {
-                    error(t)
-                }
+                val result = enqueueAwaitOrNull()
+                if (result != null) success(result)
+                else error(TimeoutException("request timeout"))
             }
         }
 
@@ -143,6 +127,15 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                         if (r != null) return@consume r else continue
                     }
                     return@consume null
+                }
+            }
+        }
+
+        override fun enqueueLiveData(): MutableLiveData<R> {
+            return MutableLiveData<R>().apply {
+                scope.launch {
+                    val result = enqueueAwaitOrNull()
+                    if (result != null) postValue(result)
                 }
             }
         }
