@@ -17,8 +17,8 @@ class SimpleActivity : BaseActivity() {
     private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
-            delay(999999999999999999)
-//            delay(500)
+//            delay(999999999999999999)
+            delay(500)
             val map = mutableMapOf<Long, UserInfo>()
             for (item in data) {
                 map[item] = UserInfo(item, "$item name")
@@ -65,7 +65,9 @@ class SimpleActivity : BaseActivity() {
             val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)
             debugLog("enqueuelivedata send $key")
-            call.enqueueLiveData().observe(this, Observer {
+            val liveData = call.enqueueLiveData()
+            debugLog("enqueuelivedata getValue() ${liveData.value}")
+            liveData.observe(this, Observer {
                 debugLog("enqueuelivedata response is $it")
             })
         }
