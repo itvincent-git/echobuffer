@@ -1,6 +1,7 @@
 package net.echobuffer
 
 import android.arch.lifecycle.MutableLiveData
+import android.os.Looper
 
 /**
  * The return object of then send method
@@ -35,8 +36,16 @@ class CacheCall<R>(private val cacheValue: R): Call<R> {
 
     override fun enqueueLiveData(): MutableLiveData<R> {
         return MutableLiveData<R>().apply {
-            this.postValue(cacheValue)
+            setOrPostValue(cacheValue)
         }
     }
+}
+
+
+fun <T> MutableLiveData<T>.setOrPostValue(value: T) {
+    if (Looper.myLooper() == Looper.getMainLooper())
+        setValue(value)
+    else
+        postValue(value)
 }
 
