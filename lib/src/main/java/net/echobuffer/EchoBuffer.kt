@@ -78,7 +78,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                 }
                 resultMap?.let {
                     cache.putAll(it)
-                    responseChannel.send(it)
+                    responseChannel.offer(it)
                 }
                 lastTTL = realTTL.coerceIn(requestIntervalRange)
                 echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
@@ -88,7 +88,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
 
     private suspend inline fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
         if (alreadyInCaches.isNotEmpty()) {
-            responseChannel.send(alreadyInCaches)
+            responseChannel.offer(alreadyInCaches)
         }
     }
 
