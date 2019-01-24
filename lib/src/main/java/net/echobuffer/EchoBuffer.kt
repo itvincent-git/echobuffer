@@ -36,6 +36,7 @@ object EchoBuffer {
  */
 interface EchoBufferRequest<S, R> {
     fun send(data: S): Call<R>
+    suspend fun sendBatch(data: Set<S>): Call<Map<S, R>>
     fun getCache(): Cache<S, R>
 }
 
@@ -79,7 +80,38 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         }
     }
 
-    private suspend fun requestDelegateToResChannel(intentToRequests: MutableSet<S>): Long {
+    private val batchActor = scope.actor<Set<S>>(capacity = capacity) {
+        consumeEach {
+            val intentToRequests = mutableSetOf<S>()
+            val alreadyInCaches = mutableMapOf<S, R>()
+            for (item in it) {
+                val cache = getCache()[item]
+                if (cache != null) {
+                    alreadyInCaches[item] = cache
+                } else {
+                    intentToRequests.add(item)
+                }
+            }
+            if (intentToRequests.isEmpty()) {
+                echoLog.d("batch already in caches")
+                responseChannel.offer(alreadyInCaches)
+            } else {
+                var resultMap: Map<S, R>? = null
+                val realTTL = measureTimeMillis {
+                    echoLog.d("batch requestDelegate $intentToRequests")
+                    resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
+                }
+                resultMap?.let {
+                    cache.putAll(it)
+                    responseChannel.offer(it + alreadyInCaches)
+                }
+                lastTTL = realTTL.coerceIn(requestIntervalRange)
+                echoLog.d("batchActor update realTTL:$realTTL lastTTL:$lastTTL")
+            }
+        }
+    }
+
+    private suspend fun requestDelegateToResChannel(intentToRequests: Set<S>): Long {
         var resultMap: Map<S, R>? = null
         val realTTL = measureTimeMillis {
             echoLog.d("requestDelegate $intentToRequests")
@@ -139,6 +171,12 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         return call
     }
 
+    override suspend fun sendBatch(data: Set<S>): Call<Map<S, R>> {
+        val call = BatchRequestCall(data, requestTimeoutMs)
+        batchActor.offer(data)
+        return call
+    }
+
     inner class RequestCall(private val requestData: S,
                             private val requestTimeoutMs: Long): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
@@ -152,7 +190,6 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         override suspend fun enqueueAwaitOrNull(): R? {
             return try {
                 withTimeout(requestTimeoutMs) {
-
                     return@withTimeout responseChannel.openSubscription().consume {
                         for (map in this) {
                             val r = map[requestData]
@@ -172,6 +209,47 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
 
         override fun enqueueLiveData(): MutableLiveData<R> {
             return MutableLiveData<R>().apply {
+                scope.launch {
+                    val result = enqueueAwaitOrNull()
+                    if (result != null) postValue(result)
+                }
+            }
+        }
+    }
+
+    inner class BatchRequestCall(private val requestData: Set<S>,
+                                 private val requestTimeoutMs: Long): Call<Map<S, R>> {
+
+        override fun enqueue(success: (Map<S, R>) -> Unit, error: (Throwable) -> Unit) {
+            scope.launch {
+                val result = enqueueAwaitOrNull()
+                if (result != null) success(result)
+                else error(TimeoutException("batch request timeout"))
+            }
+        }
+
+        override suspend fun enqueueAwaitOrNull(): Map<S, R>? {
+            return try {
+                withTimeout(requestTimeoutMs) {
+                    return@withTimeout responseChannel.openSubscription().consume {
+                        for (map in this) {
+
+                            if (map.keys.containsAll(requestData)) {
+                                echoLog.d("batch enqueueAwait return $requestData -> $map")
+                                return@consume map
+                            } else continue
+                        }
+                        return@consume null
+                    }
+                }
+            } catch (t: Throwable) {
+                echoLog.d("batch enqueueAwait timeout $requestData")
+                return null
+            }
+        }
+
+        override fun enqueueLiveData(): MutableLiveData<Map<S, R>> {
+            return MutableLiveData<Map<S, R>>().apply {
                 scope.launch {
                     val result = enqueueAwaitOrNull()
                     if (result != null) postValue(result)

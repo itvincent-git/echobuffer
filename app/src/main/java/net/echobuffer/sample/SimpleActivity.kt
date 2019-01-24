@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import kotlinx.android.synthetic.main.activity_simple.*
 import kotlinx.coroutines.*
+import net.echobuffer.Call
 import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
 import net.echobuffer.sample.util.debugLog
@@ -70,6 +71,18 @@ class SimpleActivity : BaseActivity() {
             liveData.observe(this, Observer {
                 debugLog("enqueuelivedata response is $it")
             })
+        }
+
+        send_multi_btn.setOnClickListener {
+            val random = Random(System.currentTimeMillis())
+            val keys = setOf(random.nextLong(randomCeil), random.nextLong(randomCeil), random.nextLong(randomCeil),
+                    random.nextLong(randomCeil), random.nextLong(randomCeil))
+            debugLog("send multi send $keys")
+            launch {
+                val call = echoBufferRequest.sendBatch(keys)
+                val response = call.enqueueAwaitOrNull()
+                debugLog("send multi response is $response")
+            }
         }
     }
 
