@@ -72,21 +72,26 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                 fetchAllChannelDataToSet(intentToRequests, alreadyInCaches)
                 sendAlreadyCacheToResponse(alreadyInCaches)
                 if (intentToRequests.isEmpty()) continue
-                var resultMap: Map<S, R>? = null
-                val realTTL = measureTimeMillis {
-                    resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
-                }
-                resultMap?.let {
-                    cache.putAll(it)
-                    responseChannel.offer(it)
-                }
+                val realTTL = requestDelegateToResChannel(intentToRequests)
                 lastTTL = realTTL.coerceIn(requestIntervalRange)
                 echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
             }
         }
     }
 
-    private suspend inline fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
+    private suspend fun requestDelegateToResChannel(intentToRequests: MutableSet<S>): Long {
+        var resultMap: Map<S, R>? = null
+        val realTTL = measureTimeMillis {
+            resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
+        }
+        resultMap?.let {
+            cache.putAll(it)
+            responseChannel.offer(it)
+        }
+        return realTTL
+    }
+
+    private inline fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
         if (alreadyInCaches.isNotEmpty()) {
             responseChannel.offer(alreadyInCaches)
         }
