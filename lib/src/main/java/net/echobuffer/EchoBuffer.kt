@@ -122,7 +122,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
             return withTimeoutOrNull(requestTimeoutMs) {
                 return@withTimeoutOrNull responseChannel.openSubscription().consume {
                     for (map in this) {
-                        echoLog.d("enqueueAwait on consume $map")
+                        echoLog.d("enqueueAwait on consume $requestData")
                         val r = map[requestData]
                         if (r != null) return@consume r else continue
                     }
