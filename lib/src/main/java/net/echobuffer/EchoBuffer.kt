@@ -82,6 +82,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     private suspend fun requestDelegateToResChannel(intentToRequests: MutableSet<S>): Long {
         var resultMap: Map<S, R>? = null
         val realTTL = measureTimeMillis {
+            echoLog.d("requestDelegate $intentToRequests")
             resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
         }
         resultMap?.let {
@@ -149,17 +150,23 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         }
 
         override suspend fun enqueueAwaitOrNull(): R? {
-            return withTimeoutOrNull(requestTimeoutMs) {
-                return@withTimeoutOrNull responseChannel.openSubscription().consume {
-                    for (map in this) {
-                        val r = map[requestData]
-                        if (r != null) {
-                            echoLog.d("enqueueAwait return $requestData -> $r")
-                            return@consume r
-                        } else continue
+            return try {
+                withTimeout(requestTimeoutMs) {
+
+                    return@withTimeout responseChannel.openSubscription().consume {
+                        for (map in this) {
+                            val r = map[requestData]
+                            if (r != null) {
+                                echoLog.d("enqueueAwait return $requestData -> $r")
+                                return@consume r
+                            } else continue
+                        }
+                        return@consume null
                     }
-                    return@consume null
                 }
+            } catch (t: Throwable) {
+                echoLog.d("enqueueAwait timeout $requestData")
+                return null
             }
         }
 
