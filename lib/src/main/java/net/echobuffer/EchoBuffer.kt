@@ -123,16 +123,13 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     override fun send(data: S): Call<R> {
         val cacheValue = cache[data]
         if (cacheValue != null) {
-            echoLog.d("hit the cache")
+            echoLog.d("hit the cache $data")
             return CacheCall(cacheValue)
         }
 
         val call = RequestCall(data, requestTimeoutMs)
-        scope.launch {
-            echoLog.d("sendActor send before ${requestDelegate}>$data")
-            sendActor.send(data)
-            echoLog.d("sendActor sent")
-        }
+        sendActor.offer(data)
+        echoLog.d("sendActor sent $data")
         return call
     }
 
@@ -150,9 +147,11 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
             return withTimeoutOrNull(requestTimeoutMs) {
                 return@withTimeoutOrNull responseChannel.openSubscription().consume {
                     for (map in this) {
-                        echoLog.d("enqueueAwait on consume $map")
                         val r = map[requestData]
-                        if (r != null) return@consume r else continue
+                        if (r != null) {
+                            echoLog.d("enqueueAwait return $requestData -> $r")
+                            return@consume r
+                        } else continue
                     }
                     return@consume null
                 }
