@@ -31,7 +31,7 @@ class SimpleActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_simple)
 
-        val randomCeil = 20L
+        val randomCeil = 10L
         send_wait_btn.setOnClickListener {
             val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)

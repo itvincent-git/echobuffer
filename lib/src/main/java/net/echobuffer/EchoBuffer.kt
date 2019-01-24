@@ -63,24 +63,18 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     private val sendActor = scope.actor<S>(capacity = capacity) {
         consume {
             echoLog.d("start consume")
-            val set = mutableSetOf<S>()
+            val intentToRequests = mutableSetOf<S>()
+            val alreadyInCaches = mutableMapOf<S, R>()
             while (true) {
-                if (set.isNotEmpty()) set.clear()
-                val e = channel.receive()
-                echoLog.d("add to set")
-                set.add(e)
-
-                withTimeoutOrNull(lastTTL) {
-                    for (e in this@consume) {
-                        echoLog.d("add to set with timeout")
-                        set.add(e)
-                    }
-                }
-
-                if (set.isEmpty()) continue
+                if (intentToRequests.isNotEmpty()) intentToRequests.clear()
+                if (alreadyInCaches.isNotEmpty()) alreadyInCaches.clear()
+                fetchOneChannelDataToSet(intentToRequests, alreadyInCaches)
+                fetchAllChannelDataToSet(intentToRequests, alreadyInCaches)
+                sendAlreadyCacheToResponse(alreadyInCaches)
+                if (intentToRequests.isEmpty()) continue
                 var resultMap: Map<S, R>? = null
                 val realTTL = measureTimeMillis {
-                    resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(set) }
+                    resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
                 }
                 resultMap?.let {
                     cache.putAll(it)
@@ -88,6 +82,40 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                 }
                 lastTTL = realTTL.coerceIn(requestIntervalRange)
                 echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
+            }
+        }
+    }
+
+    private suspend inline fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
+        if (alreadyInCaches.isNotEmpty()) {
+            responseChannel.send(alreadyInCaches)
+        }
+    }
+
+    private suspend inline fun ActorScope<S>.fetchOneChannelDataToSet(intentToRequests: MutableSet<S>, alreadyInCaches: MutableMap<S, R>) {
+        val e = channel.receive()
+        val cache = getCache()[e]
+        if (cache != null) {
+            echoLog.d("already has cache")
+            alreadyInCaches[e] = cache
+        } else {
+            echoLog.d("add to set")
+            intentToRequests.add(e)
+        }
+    }
+
+    private suspend inline fun ReceiveChannel<S>.fetchAllChannelDataToSet(intentToRequests: MutableSet<S>, alreadyInCaches: MutableMap<S, R>) {
+        withTimeoutOrNull(lastTTL) {
+            for (e in this@fetchAllChannelDataToSet) {
+                val cache = getCache()[e]
+                if (cache != null) {
+                    echoLog.d("already has cache with timeout")
+                    alreadyInCaches[e] = cache
+                } else {
+                    echoLog.d("add to set with timeout")
+                    intentToRequests.add(e)
+                }
+                intentToRequests.add(e)
             }
         }
     }
@@ -122,7 +150,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
             return withTimeoutOrNull(requestTimeoutMs) {
                 return@withTimeoutOrNull responseChannel.openSubscription().consume {
                     for (map in this) {
-                        echoLog.d("enqueueAwait on consume $requestData")
+                        echoLog.d("enqueueAwait on consume $map")
                         val r = map[requestData]
                         if (r != null) return@consume r else continue
                     }
