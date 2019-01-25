@@ -58,7 +58,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                                           maxCacheSize: Int,
                                           private val requestTimeoutMs: Long): EchoBufferRequest<S, R> {
     private val cache = RealCache<S, R>(maxCacheSize)
-    private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
+    private val responseChannel = BroadcastChannel<Map<S, R>>(Channel.CONFLATED)
     private val scope = CoroutineScope( Job() + Dispatchers.IO)
     private var lastTTL = 100L
     private val sendActor = scope.actor<S>(capacity = capacity) {
@@ -233,7 +233,6 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                 withTimeout(requestTimeoutMs) {
                     return@withTimeout responseChannel.openSubscription().consume {
                         for (map in this) {
-
                             if (map.keys.containsAll(requestData)) {
                                 echoLog.d("batch enqueueAwait return $requestData -> $map")
                                 return@consume map
