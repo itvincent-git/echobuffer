@@ -10,6 +10,8 @@ import kotlin.system.measureTimeMillis
  * EchoBuffer entry
  * @author zhongyongsheng
  */
+@ExperimentalCoroutinesApi
+@ObsoleteCoroutinesApi
 object EchoBuffer {
     /**
      * 构建request，用于发送数据
@@ -52,9 +54,11 @@ interface RequestDelegate<S, R> {
     suspend fun request(data: Set<S>): Map<S, R>?
 }
 
+@ExperimentalCoroutinesApi
+@ObsoleteCoroutinesApi
 private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDelegate<S, R>,
                                           capacity: Int,
-                                          requestIntervalRange: LongRange,
+                                          private val requestIntervalRange: LongRange,
                                           maxCacheSize: Int,
                                           private val requestTimeoutMs: Long): EchoBufferRequest<S, R> {
     private val cache = RealCache<S, R>(maxCacheSize)
@@ -80,37 +84,6 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         }
     }
 
-    private val batchActor = scope.actor<Set<S>>(capacity = capacity) {
-        consumeEach {
-            val intentToRequests = mutableSetOf<S>()
-            val alreadyInCaches = mutableMapOf<S, R>()
-            for (item in it) {
-                val cache = getCache()[item]
-                if (cache != null) {
-                    alreadyInCaches[item] = cache
-                } else {
-                    intentToRequests.add(item)
-                }
-            }
-            if (intentToRequests.isEmpty()) {
-                echoLog.d("batch already in caches")
-                responseChannel.offer(alreadyInCaches)
-            } else {
-                var resultMap: Map<S, R>? = null
-                val realTTL = measureTimeMillis {
-                    echoLog.d("batch requestDelegate $intentToRequests")
-                    resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
-                }
-                resultMap?.let {
-                    cache.putAll(it)
-                    responseChannel.offer(it + alreadyInCaches)
-                }
-                lastTTL = realTTL.coerceIn(requestIntervalRange)
-                echoLog.d("batchActor update realTTL:$realTTL lastTTL:$lastTTL")
-            }
-        }
-    }
-
     private suspend fun requestDelegateToResChannel(intentToRequests: Set<S>): Long {
         var resultMap: Map<S, R>? = null
         val realTTL = measureTimeMillis {
@@ -124,7 +97,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         return realTTL
     }
 
-    private inline fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
+    private fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
         if (alreadyInCaches.isNotEmpty()) {
             responseChannel.offer(alreadyInCaches)
         }
@@ -164,20 +137,16 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
             echoLog.d("hit the cache $data")
             return CacheCall(cacheValue)
         }
-
-        val call = RequestCall(data, requestTimeoutMs)
         sendActor.offer(data)
         echoLog.d("sendActor sent $data")
-        return call
+        return RequestCall(data, requestTimeoutMs)
     }
 
     override suspend fun sendBatch(data: Set<S>): Call<Map<S, R>> {
-        val call = BatchRequestCall(data, requestTimeoutMs)
-        batchActor.offer(data)
-        return call
+        return BatchRequestCall(data, requestTimeoutMs)
     }
 
-    inner class RequestCall(private val requestData: S,
+    private inner class RequestCall(private val requestData: S,
                             private val requestTimeoutMs: Long): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
@@ -194,7 +163,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                         for (map in this) {
                             val r = map[requestData]
                             if (r != null) {
-                                echoLog.d("enqueueAwait return $requestData -> $r")
+                                echoLog.d("enqueueAwait return $requestData ${this@RealEchoBufferRequest}")
                                 return@consume r
                             } else continue
                         }
@@ -217,7 +186,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         }
     }
 
-    inner class BatchRequestCall(private val requestData: Set<S>,
+    private inner class BatchRequestCall(private val requestData: Set<S>,
                                  private val requestTimeoutMs: Long): Call<Map<S, R>> {
 
         override fun enqueue(success: (Map<S, R>) -> Unit, error: (Throwable) -> Unit) {
@@ -231,19 +200,51 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         override suspend fun enqueueAwaitOrNull(): Map<S, R>? {
             return try {
                 withTimeout(requestTimeoutMs) {
-                    return@withTimeout responseChannel.openSubscription().consume {
-                        for (map in this) {
-                            if (map.keys.containsAll(requestData)) {
-                                echoLog.d("batch enqueueAwait return $requestData -> $map")
-                                return@consume map
-                            } else continue
-                        }
-                        return@consume null
-                    }
+                    return@withTimeout fetchBatchData()
                 }
             } catch (t: Throwable) {
                 echoLog.d("batch enqueueAwait timeout $requestData")
                 return null
+            }
+        }
+
+        private suspend fun fetchBatchData(): Map<S, R>? {
+            val intentToRequests = mutableSetOf<S>()
+            val alreadyInCaches = mutableMapOf<S, R>()
+            fetchInCache(alreadyInCaches, intentToRequests)
+            if (intentToRequests.isEmpty()) {
+                echoLog.d("batch already in caches")
+                return alreadyInCaches
+            } else {
+                var resultMap: Map<S, R>? = fetchWithDelegate(intentToRequests)
+                resultMap?.let { map ->
+                    cache.putAll(map)
+                    val result = map + alreadyInCaches
+                    echoLog.d("batch requestDelegate result $requestData ${this@RealEchoBufferRequest}")
+                    return result
+                }
+            }
+            return null
+        }
+
+        private suspend fun fetchWithDelegate(intentToRequests: MutableSet<S>): Map<S, R>? {
+            var resultMap: Map<S, R>? = null
+            val realTTL = measureTimeMillis {
+                echoLog.d("batch requestDelegate $intentToRequests")
+                resultMap = withTimeoutOrNull(requestTimeoutMs) { requestDelegate.request(intentToRequests) }
+            }
+            echoLog.d("batch request realTTL:$realTTL")
+            return resultMap
+        }
+
+        private fun fetchInCache(alreadyInCaches: MutableMap<S, R>, intentToRequests: MutableSet<S>) {
+            for (item in requestData) {
+                val cache = getCache()[item]
+                if (cache != null) {
+                    alreadyInCaches[item] = cache
+                } else {
+                    intentToRequests.add(item)
+                }
             }
         }
 
