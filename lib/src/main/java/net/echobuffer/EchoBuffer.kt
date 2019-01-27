@@ -79,7 +79,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                 if (intentToRequests.isEmpty()) continue
                 val realTTL = requestDelegateToResChannel(intentToRequests)
                 lastTTL = realTTL.coerceIn(requestIntervalRange)
-                echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL")
+                echoLog.d("update realTTL:$realTTL lastTTL:$lastTTL $requestDelegate")
             }
         }
     }
@@ -147,7 +147,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     }
 
     private inner class RequestCall(private val requestData: S,
-                            private val requestTimeoutMs: Long): Call<R> {
+                                    private val requestTimeoutMs: Long): Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
                 val result = enqueueAwaitOrNull()
@@ -163,7 +163,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                         for (map in this) {
                             val r = map[requestData]
                             if (r != null) {
-                                echoLog.d("enqueueAwait return $requestData ${this@RealEchoBufferRequest}")
+                                echoLog.d("enqueueAwait return $requestData ${this@RealEchoBufferRequest.requestDelegate}")
                                 return@consume r
                             } else continue
                         }
@@ -187,7 +187,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     }
 
     private inner class BatchRequestCall(private val requestData: Set<S>,
-                                 private val requestTimeoutMs: Long): Call<Map<S, R>> {
+                                         private val requestTimeoutMs: Long): Call<Map<S, R>> {
 
         override fun enqueue(success: (Map<S, R>) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
@@ -220,7 +220,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                 resultMap?.let { map ->
                     cache.putAll(map)
                     val result = map + alreadyInCaches
-                    echoLog.d("batch requestDelegate result $requestData ${this@RealEchoBufferRequest}")
+                    echoLog.d("batch requestDelegate result $requestData ${this@RealEchoBufferRequest.requestDelegate}")
                     return result
                 }
             }
