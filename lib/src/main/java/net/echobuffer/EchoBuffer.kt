@@ -24,8 +24,9 @@ object EchoBuffer {
                              capacity: Int = 10,
                              requestIntervalRange: LongRange = LongRange(100L, 1000L),
                              maxCacheSize: Int = 256,
-                             requestTimeoutMs: Long = 3000): EchoBufferRequest<S, R> {
-        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange, maxCacheSize, requestTimeoutMs)
+                             requestTimeoutMs: Long = 3000,
+                             dispatcher: CoroutineDispatcher = newSingleThreadContext("EchoBuffer")): EchoBufferRequest<S, R> {
+        return RealEchoBufferRequest(requestDelegate, capacity, requestIntervalRange, maxCacheSize, requestTimeoutMs, dispatcher)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -60,12 +61,13 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                                           capacity: Int,
                                           private val requestIntervalRange: LongRange,
                                           maxCacheSize: Int,
-                                          private val requestTimeoutMs: Long): EchoBufferRequest<S, R> {
+                                          private val requestTimeoutMs: Long,
+                                          dispatcher: CoroutineDispatcher): EchoBufferRequest<S, R> {
     private val cache = RealCache<S, R>(maxCacheSize)
     private val responseChannel = BroadcastChannel<Map<S, R>>(Channel.CONFLATED)
-    private val scope = CoroutineScope( Job() + Dispatchers.IO)
+    private val scope = CoroutineScope( Job() + dispatcher)
     private var lastTTL = 100L
-    private val sendActor = scope.actor<S>(capacity = capacity) {
+    private val sendActor = scope.actor<S>(capacity = Channel.CONFLATED) {
         consume {
             echoLog.d("start consume")
             val intentToRequests = mutableSetOf<S>()
