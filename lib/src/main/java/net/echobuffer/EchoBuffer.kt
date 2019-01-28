@@ -67,7 +67,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     private val responseChannel = BroadcastChannel<Map<S, R>>(Channel.CONFLATED)
     private val scope = CoroutineScope( Job() + dispatcher)
     private var lastTTL = 100L
-    private val sendActor = scope.actor<S>(capacity = Channel.CONFLATED) {
+    private val sendActor = scope.actor<S>(capacity = capacity) {
         consume {
             echoLog.d("start consume")
             val intentToRequests = mutableSetOf<S>()
