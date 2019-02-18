@@ -84,6 +84,20 @@ class SimpleActivity : BaseActivity() {
                 debugLog("send multi response is $response")
             }
         }
+
+        enqueue_dontusecache_btn.setOnClickListener {
+            val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
+            val call = echoBufferRequest.send(key, false)
+            debugLog("enqueue don't use cache $key")
+            launch {
+                try {
+                    val userInfo = call.enqueueAwaitOrNull()
+                    debugLog("enqueue don't use cache response is $userInfo")
+                } catch (t: Throwable) {
+                    errorLog("enqueue don't use cache response error", t)
+                }
+            }
+        }
     }
 
 }

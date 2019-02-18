@@ -14,7 +14,7 @@ import kotlin.system.measureTimeMillis
 @ObsoleteCoroutinesApi
 object EchoBuffer {
     /**
-     * 构建request，用于发送数据
+     * build EchoBufferRequest to send request
      *
      * @param requestDelegate
      * @param capacity
@@ -38,7 +38,7 @@ object EchoBuffer {
  * send request and return Call
  */
 interface EchoBufferRequest<S, R> {
-    fun send(data: S): Call<R>
+    fun send(data: S, useCache: Boolean = true): Call<R>
     suspend fun sendBatch(data: Set<S>): Call<Map<S, R>>
     fun getCache(): Cache<S, R>
 }
@@ -67,7 +67,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
     private val responseChannel = BroadcastChannel<Map<S, R>>(Channel.CONFLATED)
     private val scope = CoroutineScope( Job() + dispatcher)
     private var lastTTL = 100L
-    private val sendActor = scope.actor<S>(capacity = capacity) {
+    private val sendActor = scope.actor<SendActorData<S>>(capacity = capacity) {
         consume {
             echoLog.d("start consume")
             val intentToRequests = mutableSetOf<S>()
@@ -105,41 +105,46 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
         }
     }
 
-    private suspend inline fun ActorScope<S>.fetchOneChannelDataToSet(intentToRequests: MutableSet<S>, alreadyInCaches: MutableMap<S, R>) {
-        val e = channel.receive()
-        val cache = getCache()[e]
-        if (cache != null) {
-            echoLog.d("already has cache")
-            alreadyInCaches[e] = cache
-        } else {
-            echoLog.d("add to set")
-            intentToRequests.add(e)
+    private suspend inline fun ActorScope<SendActorData<S>>.fetchOneChannelDataToSet(intentToRequests: MutableSet<S>, alreadyInCaches: MutableMap<S, R>) {
+        val item = channel.receive()
+        val e = item.requestData
+        if (item.useCache) {
+            val cache = getCache()[e]
+            if (cache != null) {
+                echoLog.d("already has cache")
+                alreadyInCaches[e] = cache
+                return
+            }
         }
+        echoLog.d("add to set")
+        intentToRequests.add(e)
     }
 
-    private suspend inline fun ReceiveChannel<S>.fetchAllChannelDataToSet(intentToRequests: MutableSet<S>, alreadyInCaches: MutableMap<S, R>) {
+    private suspend inline fun ReceiveChannel<SendActorData<S>>.fetchAllChannelDataToSet(intentToRequests: MutableSet<S>, alreadyInCaches: MutableMap<S, R>) {
         withTimeoutOrNull(lastTTL) {
-            for (e in this@fetchAllChannelDataToSet) {
-                val cache = getCache()[e]
-                if (cache != null) {
-                    echoLog.d("already has cache with timeout")
-                    alreadyInCaches[e] = cache
-                } else {
-                    echoLog.d("add to set with timeout")
-                    intentToRequests.add(e)
+            for (item in this@fetchAllChannelDataToSet) {
+                val e = item.requestData
+                if (item.useCache) {
+                    val cache = getCache()[e]
+                    if (cache != null) {
+                        echoLog.d("already has cache with timeout")
+                        alreadyInCaches[e] = cache
+                        continue
+                    }
                 }
+                echoLog.d("add to set with timeout")
                 intentToRequests.add(e)
             }
         }
     }
 
-    override fun send(data: S): Call<R> {
+    override fun send(data: S, useCache: Boolean): Call<R> {
         val cacheValue = cache[data]
-        if (cacheValue != null) {
+        if (cacheValue != null && useCache) {
             echoLog.d("hit the cache $data")
             return CacheCall(cacheValue)
         }
-        sendActor.offer(data)
+        sendActor.offer(SendActorData(data, useCache))
         echoLog.d("sendActor sent $data")
         return RequestCall(data, requestTimeoutMs)
     }
@@ -262,3 +267,5 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
 
     override fun getCache(): Cache<S, R> = cache
 }
+
+internal data class SendActorData<S>(val requestData: S, val useCache: Boolean)
