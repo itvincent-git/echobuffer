@@ -64,7 +64,7 @@ private class RealEchoBufferRequest<S, R>(private val requestDelegate: RequestDe
                                           private val requestTimeoutMs: Long,
                                           dispatcher: CoroutineDispatcher): EchoBufferRequest<S, R> {
     private val cache = RealCache<S, R>(maxCacheSize)
-    private val responseChannel = BroadcastChannel<Map<S, R>>(Channel.CONFLATED)
+    private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     private val scope = CoroutineScope( Job() + dispatcher)
     private var lastTTL = 100L
     private val sendActor = scope.actor<SendActorData<S>>(capacity = capacity) {
