@@ -2,20 +2,23 @@ package net.echobuffer.sample
 
 import android.arch.lifecycle.Observer
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
-import kotlinx.android.synthetic.main.activity_simple.*
-import kotlinx.coroutines.*
-import net.echobuffer.Call
+import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
+import kotlinx.android.synthetic.main.activity_simple.send_livedata_btn
+import kotlinx.android.synthetic.main.activity_simple.send_multi_btn
+import kotlinx.android.synthetic.main.activity_simple.send_wait_btn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
 import net.echobuffer.sample.util.debugLog
 import net.echobuffer.sample.util.errorLog
-import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
 class SimpleActivity : BaseActivity() {
 
-    private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo>{
+    private val echoBufferRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
 //            delay(999999999999999999)
@@ -54,12 +57,11 @@ class SimpleActivity : BaseActivity() {
             val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)
             debugLog("enqueue send $key")
-            call.enqueue( {
+            call.enqueue({
                 debugLog("enqueue response is $it")
             }, {
                 errorLog("enqueue response error", it)
             })
-
         }
 
         send_livedata_btn.setOnClickListener {
@@ -85,7 +87,6 @@ class SimpleActivity : BaseActivity() {
             }
         }
     }
-
 }
 
 data class UserInfo(val uid: Long, val name: String)
