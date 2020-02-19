@@ -3,10 +3,12 @@ package net.echobuffer
 import android.arch.lifecycle.MutableLiveData
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ObsoleteCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.ActorScope
 import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -17,6 +19,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import net.stripe.lib.toSafeSendChannel
 import java.util.concurrent.TimeoutException
+import kotlin.coroutines.CoroutineContext
 import kotlin.system.measureTimeMillis
 
 /**
@@ -102,7 +105,7 @@ private class RealEchoBufferRequest<S, R>(
         val enableRequestDelegateInBatches: Boolean,
         val chunkSize: Int,
         dispatcher: CoroutineDispatcher
-) : EchoBufferRequest<S, R> {
+) : EchoBufferRequest<S, R>, CoroutineScope {
     private val cache = RealCache<S, R>(maxCacheSize)
     private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     private val scope = CoroutineScope(Job() + dispatcher)
@@ -131,6 +134,8 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
     }.toSafeSendChannel()
+    override val coroutineContext: CoroutineContext
+        get() = Job() + Dispatchers.Default
 
     private suspend fun requestDelegateToResChannel(intentToRequests: Set<S>): Long {
         var resultMap: Map<S, R>? = null
@@ -333,6 +338,29 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
 
+        /**
+         * 将MutableSet拆分成chunkSize个set,分别调用block，返回的map合并一起再返回
+         */
+        suspend fun <K, V> MutableSet<K>.chunkRunMergeMap(
+                map: MutableMap<K, V>, chunkSize: Int, block: suspend (MutableSet<K>) ->
+                Map<K, V>?
+        ) {
+            val list = splitSet(chunkSize)
+            val deferreds = mutableListOf<Deferred<Map<K, V>?>>()
+            //使用协程并发请求
+            list.forEach {
+                val deferred = async {
+                    block(it)
+                }
+                deferreds.add(deferred)
+            }
+            deferreds.forEach {
+                it.await()?.apply {
+                    map.putAll(this)
+                }
+            }
+        }
+
         private fun fetchInCache(
                 alreadyInCaches: MutableMap<S, R>, intentToRequests: MutableSet<S>
         ) {
@@ -360,21 +388,6 @@ private class RealEchoBufferRequest<S, R>(
 }
 
 internal data class SendActorData<S>(val requestData: S, val useCache: Boolean)
-
-/**
- * 将MutableSet拆分成chunkSize个set,分别调用block，返回的map合并一起再返回
- */
-inline fun <K, V> MutableSet<K>.chunkRunMergeMap(
-        map: MutableMap<K, V>, chunkSize: Int, block: (MutableSet<K>) ->
-        Map<K, V>?
-) {
-    val list = splitSet(chunkSize)
-    list.forEach {
-        block(it)?.let { _map ->
-            map.putAll(_map)
-        }
-    }
-}
 
 /**
  * 将一个MutableSet拆分成size个set，返回list
