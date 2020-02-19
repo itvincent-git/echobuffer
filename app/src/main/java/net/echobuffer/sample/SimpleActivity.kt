@@ -2,6 +2,7 @@ package net.echobuffer.sample
 
 import android.arch.lifecycle.Observer
 import android.os.Bundle
+import kotlinx.android.synthetic.main.activity_simple.send_bigdata_btn
 import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
 import kotlinx.android.synthetic.main.activity_simple.send_livedata_btn
 import kotlinx.android.synthetic.main.activity_simple.send_multi_btn
@@ -84,6 +85,21 @@ class SimpleActivity : BaseActivity() {
                 val call = echoBufferRequest.sendBatch(keys)
                 val response = call.enqueueAwaitOrNull()
                 debugLog("send multi response is $response")
+            }
+        }
+
+        send_bigdata_btn.setOnClickListener {
+            val bigRandomCeil = 100000L
+            val random = Random(System.currentTimeMillis())
+            val keys = mutableSetOf<Long>()
+            for (i in 0..1000) {
+                keys.add(random.nextLong(bigRandomCeil))
+            }
+            debugLog("send bigdata send $keys")
+            launch {
+                val call = echoBufferRequest.sendBatch(keys)
+                val response = call.enqueueAwaitOrNull()
+                debugLog("send bigdata response size:${response?.size}")
             }
         }
     }

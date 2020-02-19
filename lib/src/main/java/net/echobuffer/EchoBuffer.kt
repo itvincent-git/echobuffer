@@ -3,6 +3,7 @@ package net.echobuffer
 import android.arch.lifecycle.MutableLiveData
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ObsoleteCoroutinesApi
@@ -12,7 +13,6 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import net.stripe.lib.toSafeSendChannel
@@ -46,6 +46,7 @@ object EchoBuffer {
      * @param requestIntervalRange Interval between two batch requests
      * @param maxCacheSize 最大缓存大小
      * @param enableRequestDelegateInBatches true 打开使用批量请求requestDelegate
+     * @param dispatcher 发送请求使用的dispatcher
      */
     fun <S, R> createRequest(
             requestDelegate: RequestDelegate<S, R>,
@@ -54,7 +55,7 @@ object EchoBuffer {
             maxCacheSize: Int = 256,
             requestTimeoutMs: Long = 3000,
             enableRequestDelegateInBatches: Boolean = false,
-            dispatcher: CoroutineDispatcher = newSingleThreadContext("EchoBuffer")
+            dispatcher: CoroutineDispatcher = Dispatchers.Default
     ): EchoBufferRequest<S, R> {
         return RealEchoBufferRequest(requestDelegate, capacity,
                 requestIntervalRange, maxCacheSize, requestTimeoutMs, dispatcher)
