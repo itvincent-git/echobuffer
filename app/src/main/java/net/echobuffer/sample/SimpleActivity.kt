@@ -2,6 +2,7 @@ package net.echobuffer.sample
 
 import android.arch.lifecycle.Observer
 import android.os.Bundle
+import kotlinx.android.synthetic.main.activity_simple.enqueue_dontusecache_btn
 import kotlinx.android.synthetic.main.activity_simple.send_bigdata_btn
 import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
 import kotlinx.android.synthetic.main.activity_simple.send_livedata_btn
