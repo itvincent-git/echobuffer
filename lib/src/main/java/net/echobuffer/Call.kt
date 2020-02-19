@@ -24,6 +24,9 @@ interface Call<R> {
     fun enqueueLiveData(): MutableLiveData<R>
 }
 
+/**
+ * Call already has cache
+ */
 class CacheCall<R>(private val cacheValue: R): Call<R> {
 
     override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
