@@ -30,7 +30,7 @@ class SimpleActivity : BaseActivity() {
             }
             return map
         }
-    })
+    }, enableRequestDelegateInBatches = true, chunkSize = 8)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,7 +92,7 @@ class SimpleActivity : BaseActivity() {
             val bigRandomCeil = 100000L
             val random = Random(System.currentTimeMillis())
             val keys = mutableSetOf<Long>()
-            for (i in 0..1000) {
+            for (i in 0..29) {
                 keys.add(random.nextLong(bigRandomCeil))
             }
             debugLog("send bigdata send $keys")

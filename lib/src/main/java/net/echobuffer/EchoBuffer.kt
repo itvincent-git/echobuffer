@@ -46,6 +46,7 @@ object EchoBuffer {
      * @param requestIntervalRange Interval between two batch requests
      * @param maxCacheSize 最大缓存大小
      * @param enableRequestDelegateInBatches true 打开使用批量请求requestDelegate
+     * @param chunkSize 如果 enableRequestDelegateInBatches为true时，每次批量请求的大小
      * @param dispatcher 发送请求使用的dispatcher
      */
     fun <S, R> createRequest(
@@ -55,10 +56,13 @@ object EchoBuffer {
             maxCacheSize: Int = 256,
             requestTimeoutMs: Long = 3000,
             enableRequestDelegateInBatches: Boolean = false,
+            chunkSize: Int = 64,
             dispatcher: CoroutineDispatcher = Dispatchers.Default
     ): EchoBufferRequest<S, R> {
         return RealEchoBufferRequest(requestDelegate, capacity,
-                requestIntervalRange, maxCacheSize, requestTimeoutMs, dispatcher)
+                requestIntervalRange, maxCacheSize, requestTimeoutMs, enableRequestDelegateInBatches,
+                chunkSize.coerceAtLeast(1),
+                dispatcher)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -95,6 +99,8 @@ private class RealEchoBufferRequest<S, R>(
         private val requestIntervalRange: LongRange,
         maxCacheSize: Int,
         private val requestTimeoutMs: Long,
+        val enableRequestDelegateInBatches: Boolean,
+        val chunkSize: Int,
         dispatcher: CoroutineDispatcher
 ) : EchoBufferRequest<S, R> {
     private val cache = RealCache<S, R>(maxCacheSize)
@@ -309,8 +315,21 @@ private class RealEchoBufferRequest<S, R>(
         private suspend fun fetchWithDelegate(intentToRequests: MutableSet<S>): Map<S, R>? {
             echoLog.d("batch requestDelegate [B$index] [size:${intentToRequests.size}]${this@RealEchoBufferRequest
                     .requestDelegate} $intentToRequests")
-            return withTimeoutOrNull(requestTimeoutMs) {
-                requestDelegate.request(intentToRequests)
+            if (!enableRequestDelegateInBatches) {
+                return withTimeoutOrNull(requestTimeoutMs) {
+                    requestDelegate.request(intentToRequests)
+                }
+            } else {
+                //批量请求
+                val mergeMap = mutableMapOf<S, R>()
+                intentToRequests.chunkRunMergeMap(mergeMap, chunkSize) {
+                    requestDelegate.request(it)
+                }
+                return if (mergeMap.isEmpty()) {
+                    null
+                } else {
+                    mergeMap
+                }
             }
         }
 
@@ -341,3 +360,40 @@ private class RealEchoBufferRequest<S, R>(
 }
 
 internal data class SendActorData<S>(val requestData: S, val useCache: Boolean)
+
+/**
+ * 将MutableSet拆分成chunkSize个set,分别调用block，返回的map合并一起再返回
+ */
+inline fun <K, V> MutableSet<K>.chunkRunMergeMap(
+        map: MutableMap<K, V>, chunkSize: Int, block: (MutableSet<K>) ->
+        Map<K, V>?
+) {
+    val list = splitSet(chunkSize)
+    list.forEach {
+        block(it)?.let { _map ->
+            map.putAll(_map)
+        }
+    }
+}
+
+/**
+ * 将一个MutableSet拆分成size个set，返回list
+ */
+inline fun <E> MutableSet<E>.splitSet(size: Int): List<MutableSet<E>> {
+    val list = mutableListOf<MutableSet<E>>()
+    var tempSet: MutableSet<E>? = null
+    for (item in this) {
+        if (tempSet == null) {
+            tempSet = mutableSetOf()
+        }
+        tempSet.add(item)
+        if (tempSet.size >= size) {
+            list.add(tempSet)
+            tempSet = null
+        }
+    }
+    if (tempSet != null) {
+        list.add(tempSet)
+    }
+    return list
+}
