@@ -17,7 +17,9 @@ import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import net.stripe.lib.awaitOrNull
 import net.stripe.lib.toSafeSendChannel
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlin.coroutines.CoroutineContext
 import kotlin.system.measureTimeMillis
@@ -345,17 +347,11 @@ private class RealEchoBufferRequest<S, R>(
                 map: MutableMap<K, V>, chunkSize: Int, block: suspend (MutableSet<K>) ->
                 Map<K, V>?
         ) {
-            val list = splitSet(chunkSize)
-            val deferreds = mutableListOf<Deferred<Map<K, V>?>>()
-            //使用协程并发请求
-            list.forEach {
-                val deferred = async {
-                    block(it)
-                }
-                deferreds.add(deferred)
-            }
-            deferreds.forEach {
-                it.await()?.apply {
+            val set = splitSet(chunkSize)
+            forEachAsync(set) {
+                block(it)
+            }.forEach {
+                it.awaitOrNull(requestTimeoutMs, TimeUnit.MILLISECONDS)?.apply {
                     map.putAll(this)
                 }
             }
@@ -407,6 +403,22 @@ inline fun <E> MutableSet<E>.splitSet(size: Int): List<MutableSet<E>> {
     }
     if (tempSet != null) {
         list.add(tempSet)
+    }
+    return list
+}
+
+/**
+ * 循环执行async，并返回全部的Deferred
+ */
+suspend fun <T, R> CoroutineScope.forEachAsync(
+        iterable: Iterable<T>,
+        block: suspend CoroutineScope.(T) -> R
+): MutableList<Deferred<R>> {
+    val list = mutableListOf<Deferred<R>>()
+    iterable.forEach {
+        list.add(async {
+            block(it)
+        })
     }
     return list
 }
