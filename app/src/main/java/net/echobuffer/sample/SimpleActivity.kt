@@ -8,14 +8,17 @@ import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
 import kotlinx.android.synthetic.main.activity_simple.send_livedata_btn
 import kotlinx.android.synthetic.main.activity_simple.send_multi_btn
 import kotlinx.android.synthetic.main.activity_simple.send_wait_btn
+import kotlinx.android.synthetic.main.activity_simple.single_batch_btn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
+import net.echobuffer.forEachAsync
 import net.echobuffer.sample.util.debugLog
 import net.echobuffer.sample.util.errorLog
+import net.stripe.lib.awaitOrNull
 import kotlin.random.Random
 
 class SimpleActivity : BaseActivity() {
@@ -115,6 +118,32 @@ class SimpleActivity : BaseActivity() {
                 } catch (t: Throwable) {
                     errorLog("enqueue don't use cache response error", t)
                 }
+            }
+        }
+
+        single_batch_btn.setOnClickListener {
+            launch {
+                val bigRandomCeil = 100000L
+                val random = Random(System.currentTimeMillis())
+                val keys = mutableSetOf<Long>()
+                val results = mutableSetOf<UserInfo?>()
+                for (i in 0..29) {
+                    val key = random.nextLong(bigRandomCeil)
+                    keys.add(key)
+
+//                    if (i % 7 == 6) {
+//                        delay(500)
+//                    }
+                }
+                forEachAsync(keys) {
+                    echoBufferRequest.send(it).enqueueAwaitOrNull()
+                }.forEach {
+                    it.awaitOrNull()?.apply {
+                        results.add(this)
+                    }
+                }
+                debugLog("single batch send $keys")
+                debugLog("single batch response size:${results.size}")
             }
         }
     }

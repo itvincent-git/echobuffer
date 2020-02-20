@@ -50,7 +50,7 @@ object EchoBuffer {
      * @param capacity BroadcastChannel capacity
      * @param requestIntervalRange Interval between two batch requests
      * @param maxCacheSize 最大缓存大小
-     * @param enableRequestDelegateInBatches true 打开使用批量请求requestDelegate
+     * @param enableRequestDelegateInBatches true 打开使用批量请求requestDelegate，然后等待结果返回再拼装成完整的数据
      * @param chunkSize 如果 enableRequestDelegateInBatches为true时，每次批量请求的大小
      * @param dispatcher 发送请求使用的dispatcher
      */
@@ -235,7 +235,7 @@ private class RealEchoBufferRequest<S, R>(
                         for (map in this) {
                             val r = map[requestData]
                             if (r != null) {
-                                echoLog.d("single enqueueAwait return [$counter] ${this@RealEchoBufferRequest
+                                echoLog.d("single enqueueAwait return ${this@RealEchoBufferRequest
                                         .requestDelegate} $requestData")
                                 return@consume r
                             } else continue
@@ -244,7 +244,7 @@ private class RealEchoBufferRequest<S, R>(
                     }
                 }
             } catch (t: Throwable) {
-                echoLog.d("single enqueueAwait timeout [$counter] ${this@RealEchoBufferRequest
+                echoLog.d("single enqueueAwait timeout ${this@RealEchoBufferRequest
                         .requestDelegate} $requestData")
                 return null
             }
