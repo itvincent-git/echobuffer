@@ -34,6 +34,9 @@ import kotlin.system.measureTimeMillis
  * If the cache does not exist, the request interface obtains the data, otherwise it is obtained from the cache and is
  * uniformly returned using the above three interfaces.
  *
+ * 注意：
+ * - RTT如果没有超过requestTimeoutMs时，请求仍然出现超时并返回null，证明此时请求量太大导致capacity不够，可适当增加capacity增加请求缓冲
+ *
  * @author zhongyongsheng
  */
 
@@ -46,9 +49,9 @@ object EchoBuffer {
     /**
      * build EchoBufferRequest to send request
      *
-     * @param requestDelegate RequestDelegate
-     * @param capacity BroadcastChannel capacity
-     * @param requestIntervalRange Interval between two batch requests
+     * @param requestDelegate 实际的批量请求处理
+     * @param capacity 请求的缓冲区大小。如果请求量过多批量请求接口未能处理过来导致缓冲区超过capacity，则该请求会出现超时返回null。
+     * @param requestIntervalRange 两次批量请求之间的间隔，设置为一个范围[x,y]，x代表下限，y代表上限，单位ms
      * @param maxCacheSize 最大缓存大小
      * @param enableRequestDelegateInBatches true 打开使用批量请求requestDelegate，然后等待结果返回再拼装成完整的数据
      * @param chunkSize 如果 enableRequestDelegateInBatches为true时，每次批量请求的大小
@@ -56,7 +59,7 @@ object EchoBuffer {
      */
     fun <S, R> createRequest(
             requestDelegate: RequestDelegate<S, R>,
-            capacity: Int = 10,
+            capacity: Int = 1024,
             requestIntervalRange: LongRange = LongRange(100L, 1000L),
             maxCacheSize: Int = 256,
             requestTimeoutMs: Long = 3000,
@@ -198,12 +201,12 @@ private class RealEchoBufferRequest<S, R>(
         if (item.useCache) {
             val cache = getCache()[e]
             if (cache != null) {
-                //echoLog.d("single already has cache")
+                //echoLog.d("single already has cache ${item.requestData}")
                 alreadyInCaches[e] = cache
                 return
             }
         }
-        //echoLog.d("single add to set")
+        //echoLog.d("single add to request ${item.requestData}")
         intentToRequests.add(e)
     }
 
@@ -217,12 +220,12 @@ private class RealEchoBufferRequest<S, R>(
                 if (item.useCache) {
                     val cache = getCache()[e]
                     if (cache != null) {
-                        //echoLog.d("already has cache with timeout")
+                        //echoLog.d("single already has cache with ${item.requestData}")
                         alreadyInCaches[e] = cache
                         continue
                     }
                 }
-                //echoLog.d("single add to set with timeout")
+                //echoLog.d("single add to request ${item.requestData}")
                 intentToRequests.add(e)
             }
         }
@@ -258,7 +261,7 @@ private class RealEchoBufferRequest<S, R>(
 
         override suspend fun enqueueAwaitOrNull(): R? {
             return try {
-                withTimeout(requestTimeoutMs) {
+                withTimeout(requestTimeoutMs + lastRTT) {
                     return@withTimeout responseChannel.openSubscription().consume {
                         for (map in this) {
                             val r = map[requestData]
