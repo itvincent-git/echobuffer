@@ -144,8 +144,19 @@ private class RealEchoBufferRequest<S, R>(
         val realRTT = measureTimeMillis {
             echoLog.d("single requestDelegate[$counter][size:${intentToRequests.size}] ${this@RealEchoBufferRequest
                     .requestDelegate} $intentToRequests")
-            resultMap = withTimeoutOrNull(requestTimeoutMs) {
-                requestDelegate.request(intentToRequests)
+
+            if (!enableRequestDelegateInBatches) {
+                resultMap = withTimeoutOrNull(requestTimeoutMs) {
+                    requestDelegate.request(intentToRequests)
+                }
+            } else {
+                val mergeMap = mutableMapOf<S, R>()
+                intentToRequests.chunkRunMergeMap(mergeMap, chunkSize) {
+                    requestDelegate.request(it)
+                }
+                if (mergeMap.isNotEmpty()) {
+                    resultMap = mergeMap
+                }
             }
         }
         resultMap?.let {
@@ -153,6 +164,23 @@ private class RealEchoBufferRequest<S, R>(
             responseChannel.offer(it)
         }
         return realRTT
+    }
+
+    /**
+     * 将MutableSet拆分成chunkSize个set,分别调用block，返回的map合并一起再返回
+     */
+    suspend fun <K, V> Set<K>.chunkRunMergeMap(
+            map: MutableMap<K, V>, chunkSize: Int, block: suspend (MutableSet<K>) ->
+            Map<K, V>?
+    ) {
+        val set = splitSet(chunkSize)
+        forEachAsync(set) {
+            block(it)
+        }.forEach {
+            it.awaitOrNull(requestTimeoutMs, TimeUnit.MILLISECONDS)?.apply {
+                map.putAll(this)
+            }
+        }
     }
 
     private fun sendAlreadyCacheToResponse(alreadyInCaches: MutableMap<S, R>) {
@@ -340,23 +368,6 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
 
-        /**
-         * 将MutableSet拆分成chunkSize个set,分别调用block，返回的map合并一起再返回
-         */
-        suspend fun <K, V> MutableSet<K>.chunkRunMergeMap(
-                map: MutableMap<K, V>, chunkSize: Int, block: suspend (MutableSet<K>) ->
-                Map<K, V>?
-        ) {
-            val set = splitSet(chunkSize)
-            forEachAsync(set) {
-                block(it)
-            }.forEach {
-                it.awaitOrNull(requestTimeoutMs, TimeUnit.MILLISECONDS)?.apply {
-                    map.putAll(this)
-                }
-            }
-        }
-
         private fun fetchInCache(
                 alreadyInCaches: MutableMap<S, R>, intentToRequests: MutableSet<S>
         ) {
@@ -388,7 +399,7 @@ internal data class SendActorData<S>(val requestData: S, val useCache: Boolean)
 /**
  * 将一个MutableSet拆分成size个set，返回list
  */
-inline fun <E> MutableSet<E>.splitSet(size: Int): List<MutableSet<E>> {
+inline fun <E> Set<E>.splitSet(size: Int): List<MutableSet<E>> {
     val list = mutableListOf<MutableSet<E>>()
     var tempSet: MutableSet<E>? = null
     for (item in this) {
