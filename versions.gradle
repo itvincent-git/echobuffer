@@ -1,0 +1,70 @@
+/**
+ * Shared file between builds so that they can all use the same dependencies
+ **/
+
+//lib version and package
+ext.release_version = "$version"
+ext.group_id = 'net.echobuffer'
+
+def build_versions = [:]
+build_versions.min_sdk = 15
+build_versions.target_sdk = 28
+build_versions.build_tools = "28.0.3"
+ext.build_versions = build_versions
+
+ext.deps = [:]
+
+def versions = [:]
+versions.support = "28.0.0"
+versions.arch = "1.1.1"
+versions.constraint_layout = "2.0.0-beta3"
+versions.android_gradle_plugin = "3.2.1"
+versions.kotlin = "1.3.61"
+versions.coroutines_android_version = '1.3.3'
+versions.slog = '0.10.0'
+versions.stripe_coroutine = '0.4.0'
+
+ext.versions = versions
+
+def deps = [:]
+
+def support = [:]
+support.annotations = "com.android.support:support-annotations:$versions.support"
+support.app_compat = "com.android.support:appcompat-v7:$versions.support"
+support.recyclerview = "com.android.support:recyclerview-v7:$versions.support"
+support.cardview = "com.android.support:cardview-v7:$versions.support"
+support.design = "com.android.support:design:$versions.support"
+support.v4 = "com.android.support:support-v4:$versions.support"
+support.core_utils = "com.android.support:support-core-utils:$versions.support"
+support.multidex = "com.android.support:multidex:$versions.multidex"
+support.transition = "com.android.support:transition:$versions.support"
+support.constraint_layout = "com.android.support.constraint:constraint-layout:$versions.constraint_layout"
+deps.support = support
+
+def lifecycle = [:]
+lifecycle.extensions = "android.arch.lifecycle:extensions:$versions.arch"
+lifecycle.compiler = "android.arch.lifecycle:compiler:$versions.arch"
+deps.lifecycle = lifecycle
+
+def kotlin = [:]
+kotlin.stdlib = "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$versions.kotlin"
+kotlin.plugin = "org.jetbrains.kotlin:kotlin-gradle-plugin:$versions.kotlin"
+kotlin.coroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-android:$versions.coroutines_android_version"
+deps.kotlin = kotlin
+
+def slog = [:]
+slog.slog_file = "net.slog:slog-file:$versions.slog"
+slog.slog_composor = "net.slog:slog-composor:$versions.slog"
+slog.slog_api = "net.slog:slog-api:$versions.slog"
+deps.slog = slog
+
+def stripe = [:]
+stripe.coroutine = "net.stripe:coroutine:${versions.stripe_coroutine}"
+deps.stripe = stripe
+
+//单一jar/aar的定义放下面
+
+deps.android_gradle_plugin = "com.android.tools.build:gradle:$versions.android_gradle_plugin"
+
+ext.deps = deps
+

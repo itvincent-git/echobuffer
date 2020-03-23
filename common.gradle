@@ -1,0 +1,14 @@
+def isCi() {
+    return !((System.getenv("DEV_LINE") as String ?: "unknown").equals("unknown"))
+}
+
+ext {
+    isCi = this.&isCi//whether jenkins build
+    //whether the debug build
+    isDebug = {
+        String tskReqStr = getGradle().getStartParameter().getTaskRequests().toString()
+        if (tskReqStr.toLowerCase().contains('release'))
+            return false
+        else return true
+    }
+}

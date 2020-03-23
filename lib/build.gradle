@@ -1,33 +1,106 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
-apply plugin: 'com.github.dcendents.android-maven'
-group = 'com.github.itvincent-git'
+
+ext {
+    artifact_id = 'echobuffer'
+}
 
 android {
-    compileSdkVersion _compileSdkVersion
+    compileSdkVersion build_versions.target_sdk
     defaultConfig {
-        minSdkVersion _minSdkVersion
-        targetSdkVersion _targetSdkVersion
+        minSdkVersion build_versions.min_sdk
+        targetSdkVersion build_versions.target_sdk
     }
-
+    compileOptions {
+        kotlinOptions.freeCompilerArgs += ['-module-name', "$group_id.$artifact_id"]
+    }
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation "android.arch.lifecycle:extensions:1.1.1"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_android_version"
-    implementation "net.stripe:coroutine:${stripe_coroutine_version}"
+    implementation deps.kotlin.stdlib
+    implementation deps.kotlin.coroutines
+    implementation deps.support.recyclerview
+    implementation deps.lifecycle.extensions
+    implementation deps.stripe.coroutine
 }
 
-//apply plugin: 'com.novoda.bintray-release'//添加
-//
-//publish {
-//    userOrg = "$user_org"//bintray.com用户名
-//    groupId = "$group_id"//jcenter上的路径
-//    artifactId = 'stripe'//项目名称
-//    publishVersion = "$release_version"//版本号
-//    desc = 'stripe lib'//描述，不重要
-//    website = "$url"//网站
-//}
+//private below
+apply plugin: 'digital.wup.android-maven-publish'
+apply plugin: 'signing'
+apply plugin: 'net.researchgate.release'
+release {
+    failOnUnversionedFiles = false
+    failOnCommitNeeded = false
+    failOnUpdateNeeded = false
+    failOnPublishNeeded = false
+    failOnSnapshotDependencies = false
+    buildTasks = ['publish'] ////定义发布时该执行哪个task
+    versionPropertyFile = '../gradle.properties'
+}
+
+def isReleaseBuild() {
+    return version.contains("SNAPSHOT") == false
+}
+
+def getReleaseRepositoryUrl() {
+    return hasProperty('RELEASE_REPOSITORY_URL') ? RELEASE_REPOSITORY_URL
+            : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+}
+
+def getSnapshotRepositoryUrl() {
+    return hasProperty('SNAPSHOT_REPOSITORY_URL') ? SNAPSHOT_REPOSITORY_URL
+            : "https://oss.sonatype.org/content/repositories/snapshots/"
+}
+
+def getRepositoryUsername() {
+    return hasProperty('NEXUS_USERNAME') ? NEXUS_USERNAME : ""
+}
+
+def getRepositoryPassword() {
+    return hasProperty('NEXUS_PASSWORD') ? NEXUS_PASSWORD : ""
+}
+
+task sourcesJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier "sources"
+}
+
+publishing {
+    publications {
+        mavenAar(MavenPublication) {
+            groupId "$group_id"
+            artifactId "$artifact_id"
+            version "$release_version"
+            from components.android
+            artifact sourcesJar
+            sourceSets {
+                main {
+                    java {
+                        include '**/*.java'
+                        include '**/*.kt'
+                    }
+                }
+            }
+        }
+    }
+}
+
+publishing {
+    repositories {
+        maven {
+            credentials {
+                username = getRepositoryUsername()
+                password = getRepositoryPassword()
+            }
+
+            if(isReleaseBuild()) {
+                url getReleaseRepositoryUrl()
+            } else {
+                url getSnapshotRepositoryUrl()
+            }
+        }
+    }
+}
+
