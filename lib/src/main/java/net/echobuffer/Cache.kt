@@ -20,7 +20,7 @@ class RealCache<K, V>(maxCacheSize: Int) : Cache<K, V> {
     private val cache = LruCache<K, V>(maxCacheSize)
 
     override fun put(key: K, value: V?) {
-        value?.let { cache.put(key, it) } ?: cache.remove(key)
+        value?.let { cache.put(key, it) }
     }
 
     override fun get(key: K): V? {
