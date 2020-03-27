@@ -1,7 +1,7 @@
 package net.echobuffer
 
 import android.util.Log
-import net.stripe.lib.BuildConfig
+import net.echobuffer.lib.BuildConfig
 
 const val TAG = "EchoLog"
 /**
@@ -21,10 +21,9 @@ internal var echoLog = object : EchoLogApi {
 
     override fun e(message: String, throwable: Throwable) {
         if (enableLog()) {
-            Log.e(TAG, "${message} [${Thread.currentThread().name}]", throwable)
+            Log.e(TAG, "$message [${Thread.currentThread().name}]", throwable)
         }
     }
-
 }
 
 /**
