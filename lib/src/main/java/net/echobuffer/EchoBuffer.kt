@@ -58,19 +58,19 @@ object EchoBuffer {
      * @param dispatcher 发送请求使用的dispatcher
      */
     fun <S, R> createRequest(
-            requestDelegate: RequestDelegate<S, R>,
-            capacity: Int = 1024,
-            requestIntervalRange: LongRange = LongRange(100L, 1000L),
-            maxCacheSize: Int = 256,
-            requestTimeoutMs: Long = 3000,
-            enableRequestDelegateInBatches: Boolean = false,
-            chunkSize: Int = 64,
-            dispatcher: CoroutineDispatcher = Dispatchers.Default
+        requestDelegate: RequestDelegate<S, R>,
+        capacity: Int = 1024,
+        requestIntervalRange: LongRange = LongRange(100L, 1000L),
+        maxCacheSize: Int = 256,
+        requestTimeoutMs: Long = 3000,
+        enableRequestDelegateInBatches: Boolean = false,
+        chunkSize: Int = 64,
+        dispatcher: CoroutineDispatcher = Dispatchers.Default
     ): EchoBufferRequest<S, R> {
         return RealEchoBufferRequest(requestDelegate, capacity,
-                requestIntervalRange, maxCacheSize, requestTimeoutMs, enableRequestDelegateInBatches,
-                chunkSize.coerceAtLeast(1),
-                dispatcher)
+            requestIntervalRange, maxCacheSize, requestTimeoutMs, enableRequestDelegateInBatches,
+            chunkSize.coerceAtLeast(1),
+            dispatcher)
     }
 
     fun setLogImplementation(logImpl: EchoLogApi) {
@@ -102,21 +102,23 @@ interface RequestDelegate<S, R> {
 @ExperimentalCoroutinesApi
 @ObsoleteCoroutinesApi
 private class RealEchoBufferRequest<S, R>(
-        private val requestDelegate: RequestDelegate<S, R>,
-        capacity: Int,
-        private val requestIntervalRange: LongRange,
-        maxCacheSize: Int,
-        private val requestTimeoutMs: Long,
-        val enableRequestDelegateInBatches: Boolean,
-        val chunkSize: Int,
-        dispatcher: CoroutineDispatcher
+    private val requestDelegate: RequestDelegate<S, R>,
+    capacity: Int,
+    private val requestIntervalRange: LongRange,
+    maxCacheSize: Int,
+    private val requestTimeoutMs: Long,
+    val enableRequestDelegateInBatches: Boolean,
+    val chunkSize: Int,
+    dispatcher: CoroutineDispatcher
 ) : EchoBufferRequest<S, R>, CoroutineScope {
     private val cache = RealCache<S, R>(maxCacheSize)
     private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     private val scope = CoroutineScope(Job() + dispatcher)
     private var lastRTT = 100L//上一次请求回复的时长
+
     @Volatile
     private var counter = 0L//单个查询的计数标记
+
     @Volatile
     private var batchCounter = 0L//批量查询的计数标记
     private val sendActor = scope.actor<SendActorData<S>>(capacity = capacity) {
@@ -134,7 +136,7 @@ private class RealEchoBufferRequest<S, R>(
                 val realRTT = requestDelegateToResChannel(intentToRequests)
                 lastRTT = realRTT.coerceIn(requestIntervalRange)
                 echoLog.d("single update realRTT:$realRTT lastRTT:$lastRTT [$counter] ${this@RealEchoBufferRequest
-                        .requestDelegate}")
+                    .requestDelegate}")
                 counter++
             }
         }
@@ -146,7 +148,7 @@ private class RealEchoBufferRequest<S, R>(
         var resultMap: Map<S, R>? = null
         val realRTT = measureTimeMillis {
             echoLog.d("single requestDelegate[$counter][size:${intentToRequests.size}] ${this@RealEchoBufferRequest
-                    .requestDelegate} $intentToRequests")
+                .requestDelegate} $intentToRequests")
 
             if (!enableRequestDelegateInBatches) {
                 resultMap = withTimeoutOrNull(requestTimeoutMs) {
@@ -173,8 +175,8 @@ private class RealEchoBufferRequest<S, R>(
      * 将MutableSet拆分成chunkSize个set,分别调用block，返回的map合并一起再返回
      */
     suspend fun <K, V> Set<K>.chunkRunMergeMap(
-            map: MutableMap<K, V>, chunkSize: Int, block: suspend (MutableSet<K>) ->
-            Map<K, V>?
+        map: MutableMap<K, V>, chunkSize: Int, block: suspend (MutableSet<K>) ->
+        Map<K, V>?
     ) {
         val set = splitSet(chunkSize)
         forEachAsync(set) {
@@ -193,8 +195,8 @@ private class RealEchoBufferRequest<S, R>(
     }
 
     private suspend inline fun ActorScope<SendActorData<S>>.fetchOneChannelDataToSet(
-            intentToRequests: MutableSet<S>,
-            alreadyInCaches: MutableMap<S, R>
+        intentToRequests: MutableSet<S>,
+        alreadyInCaches: MutableMap<S, R>
     ) {
         val item = channel.receive()
         val e = item.requestData
@@ -211,8 +213,8 @@ private class RealEchoBufferRequest<S, R>(
     }
 
     private suspend inline fun ReceiveChannel<SendActorData<S>>.fetchAllChannelDataToSet(
-            intentToRequests: MutableSet<S>,
-            alreadyInCaches: MutableMap<S, R>
+        intentToRequests: MutableSet<S>,
+        alreadyInCaches: MutableMap<S, R>
     ) {
         withTimeoutOrNull(lastRTT) {
             for (item in this@fetchAllChannelDataToSet) {
@@ -248,8 +250,8 @@ private class RealEchoBufferRequest<S, R>(
     }
 
     private inner class RequestCall(
-            private val requestData: S,
-            private val requestTimeoutMs: Long
+        private val requestData: S,
+        private val requestTimeoutMs: Long
     ) : Call<R> {
         override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
@@ -267,7 +269,7 @@ private class RealEchoBufferRequest<S, R>(
                             val r = map[requestData]
                             if (r != null) {
                                 echoLog.d("single enqueueAwait return ${this@RealEchoBufferRequest
-                                        .requestDelegate} $requestData")
+                                    .requestDelegate} $requestData")
                                 return@consume r
                             } else continue
                         }
@@ -276,7 +278,7 @@ private class RealEchoBufferRequest<S, R>(
                 }
             } catch (t: Throwable) {
                 echoLog.d("single enqueueAwait timeout ${this@RealEchoBufferRequest
-                        .requestDelegate} $requestData")
+                    .requestDelegate} $requestData")
                 return null
             }
         }
@@ -292,12 +294,12 @@ private class RealEchoBufferRequest<S, R>(
     }
 
     private inner class BatchRequestCall(
-            private val requestData: Set<S>,
-            private val requestTimeoutMs: Long,
-            private val useCache: Boolean = true,
-            private val index: Long
+        private val requestData: Set<S>,
+        private val requestTimeoutMs: Long,
+        private val useCache: Boolean = true,
+        private val index: Long
     ) :
-            Call<Map<S, R>> {
+        Call<Map<S, R>> {
 
         override fun enqueue(success: (Map<S, R>) -> Unit, error: (Throwable) -> Unit) {
             scope.launch {
@@ -314,7 +316,7 @@ private class RealEchoBufferRequest<S, R>(
                 }
             } catch (t: Throwable) {
                 echoLog.d("batch enqueueAwait timeout [B$index]${this@RealEchoBufferRequest
-                        .requestDelegate} $requestData")
+                    .requestDelegate} $requestData")
                 return null
             }
         }
@@ -343,7 +345,7 @@ private class RealEchoBufferRequest<S, R>(
                     cache.putAll(map)
                     val result = map + alreadyInCaches
                     echoLog.d("batch requestDelegate result [RTT:$realRTT] [B$index] ${this@RealEchoBufferRequest
-                            .requestDelegate} $requestData")
+                        .requestDelegate} $requestData")
                     return result
                 }
             }
@@ -352,7 +354,7 @@ private class RealEchoBufferRequest<S, R>(
 
         private suspend fun fetchWithDelegate(intentToRequests: MutableSet<S>): Map<S, R>? {
             echoLog.d("batch requestDelegate [B$index] [size:${intentToRequests.size}]${this@RealEchoBufferRequest
-                    .requestDelegate} $intentToRequests")
+                .requestDelegate} $intentToRequests")
             if (!enableRequestDelegateInBatches) {
                 return withTimeoutOrNull(requestTimeoutMs) {
                     requestDelegate.request(intentToRequests)
@@ -372,7 +374,7 @@ private class RealEchoBufferRequest<S, R>(
         }
 
         private fun fetchInCache(
-                alreadyInCaches: MutableMap<S, R>, intentToRequests: MutableSet<S>
+            alreadyInCaches: MutableMap<S, R>, intentToRequests: MutableSet<S>
         ) {
             for (item in requestData) {
                 val cache = getCache()[item]
@@ -425,8 +427,8 @@ inline fun <E> Set<E>.splitSet(size: Int): List<MutableSet<E>> {
  * 循环执行async，并返回全部的Deferred
  */
 suspend fun <T, R> CoroutineScope.forEachAsync(
-        iterable: Iterable<T>,
-        block: suspend CoroutineScope.(T) -> R
+    iterable: Iterable<T>,
+    block: suspend CoroutineScope.(T) -> R
 ): MutableList<Deferred<R>> {
     val list = mutableListOf<Deferred<R>>()
     iterable.forEach {
