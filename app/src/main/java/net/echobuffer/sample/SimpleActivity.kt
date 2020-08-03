@@ -3,6 +3,7 @@ package net.echobuffer.sample
 import android.arch.lifecycle.Observer
 import android.os.Bundle
 import kotlinx.android.synthetic.main.activity_simple.enqueue_dontusecache_btn
+import kotlinx.android.synthetic.main.activity_simple.return_partial_batch_data_btn
 import kotlinx.android.synthetic.main.activity_simple.return_partial_data_btn
 import kotlinx.android.synthetic.main.activity_simple.send_bigdata_btn
 import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
@@ -36,12 +37,14 @@ class SimpleActivity : BaseActivity() {
             }
             return map
         }
+
+        override fun createDefaultData() = UserInfo(-1, "")
     }, enableRequestDelegateInBatches = true, chunkSize = 8)
 
     private val returnPartialDataRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("returnPartialDataRequest is $data")
-            delay(5000)
+            delay(500)
             val map = mutableMapOf<Long, UserInfo>()
             data.forEachIndexed { index, item ->
                 if (index > data.size / 2) return@forEachIndexed
@@ -49,6 +52,8 @@ class SimpleActivity : BaseActivity() {
             }
             return map
         }
+
+        override fun createDefaultData() = UserInfo(-1, "")
     }, enableRequestDelegateInBatches = true, chunkSize = 8)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -174,6 +179,19 @@ class SimpleActivity : BaseActivity() {
                 } catch (t: Throwable) {
                     errorLog("returnPartialDataRequest enqueueAwait response error", t)
                 }
+            }
+        }
+
+        //批量请求，只返回部分请求id的数据
+        return_partial_batch_data_btn.setOnClickListener {
+            val random = Random(System.currentTimeMillis())
+            val keys = setOf(random.nextLong(randomCeil), random.nextLong(randomCeil), random.nextLong(randomCeil),
+                random.nextLong(randomCeil), random.nextLong(randomCeil))
+            debugLog("returnPartialDataRequest send multi send $keys")
+            lifecycleScope.launch {
+                val call = returnPartialDataRequest.sendBatch(keys)
+                val response = call.enqueueAwaitOrNull()
+                debugLog("returnPartialDataRequest send multi response is $response")
             }
         }
     }

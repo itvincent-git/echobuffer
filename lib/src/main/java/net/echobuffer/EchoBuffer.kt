@@ -97,6 +97,11 @@ interface RequestDelegate<S, R> {
      * Returns Map, key for data, and value for return value
      */
     suspend fun request(data: Set<S>): Map<S, R>?
+
+    /**
+     * use default data when the response is null
+     */
+    fun createDefaultData(): R
 }
 
 @ExperimentalCoroutinesApi
@@ -149,16 +154,17 @@ private class RealEchoBufferRequest<S, R>(
                 .requestDelegate} $intentToRequests")
 
             if (!enableRequestDelegateInBatches) {
-                resultMap = withTimeoutOrNull(requestTimeoutMs) {
+                val delegateResponse = withTimeoutOrNull(requestTimeoutMs) {
                     requestDelegate.request(intentToRequests)
                 }
+                resultMap = transformMap(intentToRequests, delegateResponse)
             } else {
                 val mergeMap = mutableMapOf<S, R>()
                 intentToRequests.chunkRunMergeMap(mergeMap, chunkSize) {
                     requestDelegate.request(it)
                 }
                 if (mergeMap.isNotEmpty()) {
-                    resultMap = mergeMap
+                    resultMap = transformMap(intentToRequests, mergeMap)
                 }
             }
         }
@@ -167,6 +173,19 @@ private class RealEchoBufferRequest<S, R>(
             responseChannel.offer(it)
         }
         return realRTT
+    }
+
+    /**
+     * 返回一个新的Map<请求.key,回包.value>
+     */
+    private fun transformMap(
+        intentToRequests: Set<S>, delegateResponse: Map<S, R>?
+    ): MutableMap<S, R> {
+        val transformMap = mutableMapOf<S, R>()
+        intentToRequests.forEach {
+            transformMap[it] = delegateResponse?.get(it) ?: requestDelegate.createDefaultData()
+        }
+        return transformMap
     }
 
     /**
@@ -339,7 +358,7 @@ private class RealEchoBufferRequest<S, R>(
             } else {
                 var resultMap: Map<S, R>? = null
                 val realRTT = measureTimeMillis {
-                    resultMap = fetchWithDelegate(intentToRequests)
+                    resultMap = transformMap(intentToRequests, fetchWithDelegate(intentToRequests))
                 }
                 resultMap?.let { map ->
                     cache.putAll(map)

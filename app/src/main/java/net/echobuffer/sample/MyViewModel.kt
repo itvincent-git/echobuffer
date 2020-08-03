@@ -1,7 +1,11 @@
 package net.echobuffer.sample
 
 import android.arch.lifecycle.ViewModel
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
 import net.echobuffer.sample.util.debugLog
@@ -11,11 +15,11 @@ import kotlin.random.Random
 /**
  * Created by zhongyongsheng on 2019/1/18.
  */
-class MyViewModel: ViewModel() {
+class MyViewModel : ViewModel() {
     val randomCeil = 100L
     val random = Random(System.currentTimeMillis())
 
-    private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo> {
+    private val echoBufferRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
             delay(300)
@@ -25,6 +29,8 @@ class MyViewModel: ViewModel() {
             }
             return map
         }
+
+        override fun createDefaultData() = UserInfo(-1, "")
     }, 100)
 
     fun launchTest() {

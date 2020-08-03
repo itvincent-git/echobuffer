@@ -30,6 +30,8 @@ class PerformanceActivity : BaseActivity() {
             }
             return map
         }
+
+        override fun createDefaultData() = UserInfo(-1, "")
     }, 100)
 
     override fun onCreate(savedInstanceState: Bundle?) {
