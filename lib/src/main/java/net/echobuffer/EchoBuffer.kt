@@ -14,6 +14,7 @@ import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.channels.consume
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -21,7 +22,6 @@ import net.stripe.lib.awaitOrNull
 import net.stripe.lib.toSafeSendChannel
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
-import kotlin.coroutines.CoroutineContext
 import kotlin.system.measureTimeMillis
 
 /**
@@ -110,7 +110,7 @@ private class RealEchoBufferRequest<S, R>(
     val enableRequestDelegateInBatches: Boolean,
     val chunkSize: Int,
     dispatcher: CoroutineDispatcher
-) : EchoBufferRequest<S, R>, CoroutineScope {
+) : EchoBufferRequest<S, R> {
     private val cache = RealCache<S, R>(maxCacheSize)
     private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     private val scope = CoroutineScope(Job() + dispatcher)
@@ -141,8 +141,6 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
     }.toSafeSendChannel()
-    override val coroutineContext: CoroutineContext
-        get() = Job() + Dispatchers.Default
 
     private suspend fun requestDelegateToResChannel(intentToRequests: Set<S>): Long {
         var resultMap: Map<S, R>? = null
@@ -179,11 +177,13 @@ private class RealEchoBufferRequest<S, R>(
         Map<K, V>?
     ) {
         val set = splitSet(chunkSize)
-        forEachAsync(set) {
-            block(it)
-        }.forEach {
-            it.awaitOrNull(requestTimeoutMs, TimeUnit.MILLISECONDS)?.apply {
-                map.putAll(this)
+        coroutineScope {
+            forEachAsync(set) {
+                block(it)
+            }.forEach {
+                it.awaitOrNull(requestTimeoutMs, TimeUnit.MILLISECONDS)?.apply {
+                    map.putAll(this)
+                }
             }
         }
     }
@@ -277,7 +277,7 @@ private class RealEchoBufferRequest<S, R>(
                     }
                 }
             } catch (t: Throwable) {
-                echoLog.d("single enqueueAwait timeout ${this@RealEchoBufferRequest
+                echoLog.d("single enqueueAwait ${t.message} ${this@RealEchoBufferRequest
                     .requestDelegate} $requestData")
                 return null
             }
