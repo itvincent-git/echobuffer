@@ -277,7 +277,7 @@ private class RealEchoBufferRequest<S, R>(
                     }
                 }
             } catch (t: Throwable) {
-                echoLog.d("single enqueueAwait ${t.message} ${this@RealEchoBufferRequest
+                echoLog.d("single enqueueAwait:${t.message} ${this@RealEchoBufferRequest
                     .requestDelegate} $requestData")
                 return null
             }
@@ -315,7 +315,7 @@ private class RealEchoBufferRequest<S, R>(
                     return@withTimeout fetchBatchData()
                 }
             } catch (t: Throwable) {
-                echoLog.d("batch enqueueAwait timeout [B$index]${this@RealEchoBufferRequest
+                echoLog.d("batch enqueueAwait:${t.message} [B$index]${this@RealEchoBufferRequest
                     .requestDelegate} $requestData")
                 return null
             }
