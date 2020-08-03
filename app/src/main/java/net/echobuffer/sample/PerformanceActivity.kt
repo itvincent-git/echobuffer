@@ -2,12 +2,17 @@ package net.echobuffer.sample
 
 import android.arch.lifecycle.ViewModelProviders
 import android.os.Bundle
-import kotlinx.android.synthetic.main.activity_performance.*
-import kotlinx.coroutines.*
+import kotlinx.android.synthetic.main.activity_performance.repeat_btn
+import kotlinx.android.synthetic.main.activity_performance.res_btn
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import net.echobuffer.EchoBuffer
 import net.echobuffer.RequestDelegate
 import net.echobuffer.sample.util.debugLog
 import net.echobuffer.sample.util.errorLog
+import net.stripe.lib.lifecycleScope
 import kotlin.random.Random
 
 class PerformanceActivity : BaseActivity() {
@@ -15,7 +20,7 @@ class PerformanceActivity : BaseActivity() {
     val random = Random(System.currentTimeMillis())
     var viewModel: MyViewModel? = null
 
-    private val echoBufferRequest = EchoBuffer.createRequest(object: RequestDelegate<Long, UserInfo> {
+    private val echoBufferRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("createRequest is $data")
             delay(300)
@@ -39,7 +44,7 @@ class PerformanceActivity : BaseActivity() {
                 val key = random.nextLong(randomCeil)
                 val call = echoBufferRequest.send(key)
                 debugLog("enqueueAwait $key")
-                launch {
+                lifecycleScope.launch {
                     try {
                         withTimeout(2000) {
                             val userInfo = call.enqueueAwaitOrNull()
@@ -57,8 +62,7 @@ class PerformanceActivity : BaseActivity() {
         }
     }
 
-
-    val runnable = object: Runnable {
+    val runnable = object : Runnable {
         override fun run() {
             viewModel?.launchTest()
             res_btn.removeCallbacks(this)

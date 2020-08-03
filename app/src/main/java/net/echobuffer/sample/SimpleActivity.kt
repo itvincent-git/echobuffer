@@ -3,6 +3,7 @@ package net.echobuffer.sample
 import android.arch.lifecycle.Observer
 import android.os.Bundle
 import kotlinx.android.synthetic.main.activity_simple.enqueue_dontusecache_btn
+import kotlinx.android.synthetic.main.activity_simple.return_partial_data_btn
 import kotlinx.android.synthetic.main.activity_simple.send_bigdata_btn
 import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
 import kotlinx.android.synthetic.main.activity_simple.send_livedata_btn
@@ -19,6 +20,7 @@ import net.echobuffer.forEachAsync
 import net.echobuffer.sample.util.debugLog
 import net.echobuffer.sample.util.errorLog
 import net.stripe.lib.awaitOrNull
+import net.stripe.lib.lifecycleScope
 import kotlin.random.Random
 
 class SimpleActivity : BaseActivity() {
@@ -36,6 +38,19 @@ class SimpleActivity : BaseActivity() {
         }
     }, enableRequestDelegateInBatches = true, chunkSize = 8)
 
+    private val returnPartialDataRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
+        override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
+            debugLog("returnPartialDataRequest is $data")
+            delay(5000)
+            val map = mutableMapOf<Long, UserInfo>()
+            data.forEachIndexed { index, item ->
+                if (index > data.size / 2) return@forEachIndexed
+                map[item] = UserInfo(item, "$item name")
+            }
+            return map
+        }
+    }, enableRequestDelegateInBatches = true, chunkSize = 8)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_simple)
@@ -45,7 +60,7 @@ class SimpleActivity : BaseActivity() {
             val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key)
             debugLog("enqueueAwait $key")
-            launch {
+            lifecycleScope.launch {
                 try {
                     val userInfo = call.enqueueAwaitOrNull()
                     withContext(Dispatchers.Main) {
@@ -83,9 +98,9 @@ class SimpleActivity : BaseActivity() {
         send_multi_btn.setOnClickListener {
             val random = Random(System.currentTimeMillis())
             val keys = setOf(random.nextLong(randomCeil), random.nextLong(randomCeil), random.nextLong(randomCeil),
-                    random.nextLong(randomCeil), random.nextLong(randomCeil))
+                random.nextLong(randomCeil), random.nextLong(randomCeil))
             debugLog("send multi send $keys")
-            launch {
+            lifecycleScope.launch {
                 val call = echoBufferRequest.sendBatch(keys)
                 val response = call.enqueueAwaitOrNull()
                 debugLog("send multi response is $response")
@@ -100,7 +115,7 @@ class SimpleActivity : BaseActivity() {
                 keys.add(random.nextLong(bigRandomCeil))
             }
             debugLog("send bigdata send $keys")
-            launch {
+            lifecycleScope.launch {
                 val call = echoBufferRequest.sendBatch(keys)
                 val response = call.enqueueAwaitOrNull()
                 debugLog("send bigdata response size:${response?.size}")
@@ -111,7 +126,7 @@ class SimpleActivity : BaseActivity() {
             val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
             val call = echoBufferRequest.send(key, false)
             debugLog("enqueue don't use cache $key")
-            launch {
+            lifecycleScope.launch {
                 try {
                     val userInfo = call.enqueueAwaitOrNull()
                     debugLog("enqueue don't use cache response is $userInfo")
@@ -122,7 +137,7 @@ class SimpleActivity : BaseActivity() {
         }
 
         single_batch_btn.setOnClickListener {
-            launch {
+            lifecycleScope.launch {
                 val bigRandomCeil = 100000L
                 val random = Random(System.currentTimeMillis())
                 val keys = mutableSetOf<Long>()
@@ -144,6 +159,21 @@ class SimpleActivity : BaseActivity() {
                 }
                 debugLog("single batch send $keys")
                 debugLog("single batch response size:${results.size}")
+            }
+        }
+
+        //只返回部分请求id的数据
+        return_partial_data_btn.setOnClickListener {
+            val key = Random(System.currentTimeMillis()).nextLong(randomCeil)
+            val call = returnPartialDataRequest.send(key)
+            debugLog("returnPartialDataRequest enqueueAwait $key")
+            lifecycleScope.launch {
+                try {
+                    val userInfo = call.enqueueAwaitOrNull()
+                    debugLog("returnPartialDataRequest enqueueAwait response is $userInfo")
+                } catch (t: Throwable) {
+                    errorLog("returnPartialDataRequest enqueueAwait response error", t)
+                }
             }
         }
     }
