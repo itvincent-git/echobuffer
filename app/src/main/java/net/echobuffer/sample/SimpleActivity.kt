@@ -46,6 +46,7 @@ class SimpleActivity : BaseActivity() {
             debugLog("returnPartialDataRequest is $data")
             delay(500)
             val map = mutableMapOf<Long, UserInfo>()
+            //模拟只答复一半的数据
             data.forEachIndexed { index, item ->
                 if (index > data.size / 2) return@forEachIndexed
                 map[item] = UserInfo(item, "$item name")

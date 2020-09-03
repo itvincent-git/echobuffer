@@ -163,9 +163,7 @@ private class RealEchoBufferRequest<S, R>(
                 intentToRequests.chunkRunMergeMap(mergeMap, chunkSize) {
                     requestDelegate.request(it)
                 }
-                if (mergeMap.isNotEmpty()) {
-                    resultMap = transformMap(intentToRequests, mergeMap)
-                }
+                resultMap = transformMap(intentToRequests, mergeMap)
             }
         }
         resultMap?.let {
