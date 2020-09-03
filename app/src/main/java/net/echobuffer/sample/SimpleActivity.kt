@@ -43,14 +43,15 @@ class SimpleActivity : BaseActivity() {
 
     private val returnPartialDataRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
-            debugLog("returnPartialDataRequest is $data")
+            debugLog("[returnPartialDataRequest] request $data")
             delay(500)
             val map = mutableMapOf<Long, UserInfo>()
             //模拟只答复一半的数据
             data.forEachIndexed { index, item ->
-                if (index > data.size / 2) return@forEachIndexed
+                if (Random.nextBoolean()) return@forEachIndexed
                 map[item] = UserInfo(item, "$item name")
             }
+            debugLog("[returnPartialDataRequest] return $map")
             return map
         }
 
@@ -184,6 +185,10 @@ class SimpleActivity : BaseActivity() {
         }
 
         //批量请求，只返回部分请求id的数据
+        /**
+         * - 测试超时，期望返回null
+         * - 测试returnPartialDataRequest返回emptymap，期望返回默认对象
+         */
         return_partial_batch_data_btn.setOnClickListener {
             val random = Random(System.currentTimeMillis())
             val keys = setOf(random.nextLong(randomCeil), random.nextLong(randomCeil), random.nextLong(randomCeil),

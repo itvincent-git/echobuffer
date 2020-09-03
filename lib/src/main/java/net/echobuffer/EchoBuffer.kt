@@ -161,9 +161,10 @@ private class RealEchoBufferRequest<S, R>(
             } else {
                 val mergeMap = mutableMapOf<S, R>()
                 intentToRequests.chunkRunMergeMap(mergeMap, chunkSize) {
-                    requestDelegate.request(it)
+                    val delegateResponse = requestDelegate.request(intentToRequests)
+                    transformMap(intentToRequests, delegateResponse)
                 }
-                resultMap = transformMap(intentToRequests, mergeMap)
+                resultMap = mergeMap
             }
         }
         resultMap?.let {
@@ -175,13 +176,17 @@ private class RealEchoBufferRequest<S, R>(
 
     /**
      * 返回一个新的Map<请求.key,回包.value>
+     * - 如果delegateResponse超时，期望返回null
+     * - 如果delegateResponse返回emptymap，期望返回<key,默认对象>
      */
     private fun transformMap(
         intentToRequests: Set<S>, delegateResponse: Map<S, R>?
-    ): MutableMap<S, R> {
+    ): MutableMap<S, R>? {
+        //如果查询的结果为null，是因为超时或其它异常，则不拼接原来的key
+        if (delegateResponse == null) return null
         val transformMap = mutableMapOf<S, R>()
         intentToRequests.forEach {
-            transformMap[it] = delegateResponse?.get(it) ?: requestDelegate.createDefaultData()
+            transformMap[it] = delegateResponse[it] ?: requestDelegate.createDefaultData()
         }
         return transformMap
     }
