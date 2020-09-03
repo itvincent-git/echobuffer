@@ -258,7 +258,7 @@ private class RealEchoBufferRequest<S, R>(
     override fun send(data: S, useCache: Boolean): Call<R> {
         val cacheValue = cache[data]
         if (cacheValue != null && useCache) {
-            echoLog.d("single hit the cache $data")
+            echoLog.d("single hit the cache $data ${this@RealEchoBufferRequest.requestDelegate}")
             return CacheCall(cacheValue)
         }
         sendActor.offer(SendActorData(data, useCache))
