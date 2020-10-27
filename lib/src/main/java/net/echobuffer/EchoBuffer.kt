@@ -276,9 +276,9 @@ private class RealEchoBufferRequest<S, R>(
         private val requestData: S,
         private val requestTimeoutMs: Long
     ) : Call<R> {
-        override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
+        override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit, retry: Int) {
             scope.launch {
-                val result = enqueueAwaitOrNull()
+                val result = enqueueAwaitOrNull(retry)
                 if (result != null) success(result)
                 else error(TimeoutException("single request timeout"))
             }
@@ -309,10 +309,10 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
 
-        override fun enqueueLiveData(): MutableLiveData<R> {
+        override fun enqueueLiveData(retry: Int): MutableLiveData<R> {
             return MutableLiveData<R>().apply {
                 scope.launch {
-                    val result = enqueueAwaitOrNull()
+                    val result = enqueueAwaitOrNull(retry)
                     if (result != null) postValue(result)
                 }
             }
@@ -327,9 +327,9 @@ private class RealEchoBufferRequest<S, R>(
     ) :
         Call<Map<S, R>> {
 
-        override fun enqueue(success: (Map<S, R>) -> Unit, error: (Throwable) -> Unit) {
+        override fun enqueue(success: (Map<S, R>) -> Unit, error: (Throwable) -> Unit, retry: Int) {
             scope.launch {
-                val result = enqueueAwaitOrNull()
+                val result = enqueueAwaitOrNull(retry)
                 if (result != null) success(result)
                 else error(TimeoutException("batch request timeout"))
             }
@@ -415,10 +415,10 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
 
-        override fun enqueueLiveData(): MutableLiveData<Map<S, R>> {
+        override fun enqueueLiveData(retry: Int): MutableLiveData<Map<S, R>> {
             return MutableLiveData<Map<S, R>>().apply {
                 scope.launch {
-                    val result = enqueueAwaitOrNull()
+                    val result = enqueueAwaitOrNull(retry)
                     if (result != null) postValue(result)
                 }
             }

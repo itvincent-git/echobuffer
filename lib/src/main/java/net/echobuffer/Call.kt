@@ -11,7 +11,7 @@ interface Call<R> {
     /**
      * enqueue the request，callback invoke when success or error，callback will run in [non UI] thread
      */
-    fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit)
+    fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit, retry: Int = 0)
 
     /**
      * enqueue the request, and await until success, or throw exception when error
@@ -22,7 +22,7 @@ interface Call<R> {
     /**
      * enqueue the request, post value to LiveData when success
      */
-    fun enqueueLiveData(): MutableLiveData<R>
+    fun enqueueLiveData(retry: Int = 0): MutableLiveData<R>
 }
 
 /**
@@ -30,7 +30,7 @@ interface Call<R> {
  */
 class CacheCall<R>(private val cacheValue: R) : Call<R> {
 
-    override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
+    override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit, retry: Int) {
         success(cacheValue)
     }
 
@@ -38,7 +38,7 @@ class CacheCall<R>(private val cacheValue: R) : Call<R> {
         return cacheValue
     }
 
-    override fun enqueueLiveData(): MutableLiveData<R> {
+    override fun enqueueLiveData(retry: Int): MutableLiveData<R> {
         return MutableLiveData<R>().apply {
             setOrPostValue(cacheValue)
         }
