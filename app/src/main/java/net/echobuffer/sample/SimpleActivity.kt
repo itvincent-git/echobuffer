@@ -2,15 +2,7 @@ package net.echobuffer.sample
 
 import android.arch.lifecycle.Observer
 import android.os.Bundle
-import kotlinx.android.synthetic.main.activity_simple.enqueue_dontusecache_btn
-import kotlinx.android.synthetic.main.activity_simple.return_partial_batch_data_btn
-import kotlinx.android.synthetic.main.activity_simple.return_partial_data_btn
-import kotlinx.android.synthetic.main.activity_simple.send_bigdata_btn
-import kotlinx.android.synthetic.main.activity_simple.send_enquene_btn
-import kotlinx.android.synthetic.main.activity_simple.send_livedata_btn
-import kotlinx.android.synthetic.main.activity_simple.send_multi_btn
-import kotlinx.android.synthetic.main.activity_simple.send_wait_btn
-import kotlinx.android.synthetic.main.activity_simple.single_batch_btn
+import kotlinx.android.synthetic.main.activity_simple.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -41,6 +33,7 @@ class SimpleActivity : BaseActivity() {
         override fun createDefaultData() = UserInfo(-1, "")
     }, enableRequestDelegateInBatches = true, chunkSize = 8)
 
+    //返回部分数据
     private val returnPartialDataRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
         override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
             debugLog("[returnPartialDataRequest] request $data")
@@ -57,6 +50,17 @@ class SimpleActivity : BaseActivity() {
 
         override fun createDefaultData() = UserInfo(-1, "")
     }, enableRequestDelegateInBatches = true, chunkSize = 8)
+
+    //超时请求
+    private val timeoutRequest = EchoBuffer.createRequest(object : RequestDelegate<Long, UserInfo> {
+        override suspend fun request(data: Set<Long>): Map<Long, UserInfo> {
+            debugLog("[timeoutRequest] request $data")
+            delay(2500)
+            return emptyMap()
+        }
+
+        override fun createDefaultData() = UserInfo(-1, "")
+    }, requestTimeoutMs = 2000L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -198,6 +202,31 @@ class SimpleActivity : BaseActivity() {
                 val call = returnPartialDataRequest.sendBatch(keys)
                 val response = call.enqueueAwaitOrNull()
                 debugLog("returnPartialDataRequest send multi response is $response")
+            }
+        }
+
+        /**
+         * - 重试2次
+         */
+        retry_btn.setOnClickListener {
+//            val random = Random(System.currentTimeMillis())
+//            val keys = setOf(random.nextLong(randomCeil), random.nextLong(randomCeil), random.nextLong(randomCeil),
+//                random.nextLong(randomCeil), random.nextLong(randomCeil))
+//            debugLog("retryTwice send multi send $keys")
+//            lifecycleScope.launch {
+//                val call = timeoutRequest.sendBatch(keys)
+//                val response = call.enqueueAwaitOrNull(2)
+//                debugLog("retryTwice send multi response is $response")
+//            }
+
+            //单个请求
+            val random = Random(System.currentTimeMillis())
+            val key = random.nextLong(randomCeil)
+            debugLog("retryTwice single send $key")
+            lifecycleScope.launch {
+                val call = timeoutRequest.send(key)
+                val response = call.enqueueAwaitOrNull(2)
+                debugLog("retryTwice send single response is $response")
             }
         }
     }

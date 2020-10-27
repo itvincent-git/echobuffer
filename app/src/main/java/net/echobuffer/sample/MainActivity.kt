@@ -17,14 +17,18 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val activities = packageManager.getPackageInfo(getPackageName(), PackageManager.GET_ACTIVITIES).activities
-                .filter { !it.name.contains(this@MainActivity.localClassName) }
+        val activities = packageManager.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES)
+            .activities.filter { !it.name.contains(this@MainActivity.localClassName) }
         rv_activities.layoutManager = LinearLayoutManager(this)
-        rv_activities.adapter = object: RecyclerView.Adapter<ActivitiesViewHolder?>() {
+        rv_activities.adapter = object : RecyclerView.Adapter<ActivitiesViewHolder?>() {
             override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ActivitiesViewHolder {
                 val linearLayout = LinearLayout(parent.context)
+                linearLayout.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
                 linearLayout.minimumHeight = 100
-                linearLayout.addView(TextView(parent.context).apply { id = R.id.tv })
+                linearLayout.addView(TextView(parent.context).apply {
+                    id = R.id.tv
+                })
                 return ActivitiesViewHolder(linearLayout)
             }
 
@@ -35,15 +39,14 @@ class MainActivity : AppCompatActivity() {
             override fun onBindViewHolder(holder: ActivitiesViewHolder, position: Int) {
                 holder.textView.text = activities[position].name.substringAfterLast(".")
                 holder.linearLayout.setOnClickListener {
-                    startActivity(Intent(this@MainActivity, Class.forName(activities[position].name)))
+                    startActivity(
+                        Intent(this@MainActivity, Class.forName(activities[position].name)))
                 }
             }
         }
-
-
     }
 
-    class ActivitiesViewHolder(val linearLayout: LinearLayout): RecyclerView.ViewHolder(linearLayout) {
+    class ActivitiesViewHolder(val linearLayout: LinearLayout) : RecyclerView.ViewHolder(linearLayout) {
         val textView = linearLayout.findViewById<TextView>(R.id.tv)
     }
 }

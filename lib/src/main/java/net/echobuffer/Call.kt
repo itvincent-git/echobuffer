@@ -15,8 +15,9 @@ interface Call<R> {
 
     /**
      * enqueue the request, and await until success, or throw exception when error
+     * @param retry 重试次数
      */
-    suspend fun enqueueAwaitOrNull(): R?
+    suspend fun enqueueAwaitOrNull(retry: Int = 0): R?
 
     /**
      * enqueue the request, post value to LiveData when success
@@ -27,13 +28,13 @@ interface Call<R> {
 /**
  * Call already has cache
  */
-class CacheCall<R>(private val cacheValue: R): Call<R> {
+class CacheCall<R>(private val cacheValue: R) : Call<R> {
 
     override fun enqueue(success: (R) -> Unit, error: (Throwable) -> Unit) {
         success(cacheValue)
     }
 
-    override suspend fun enqueueAwaitOrNull(): R? {
+    override suspend fun enqueueAwaitOrNull(retry: Int): R? {
         return cacheValue
     }
 
@@ -43,7 +44,6 @@ class CacheCall<R>(private val cacheValue: R): Call<R> {
         }
     }
 }
-
 
 fun <T> MutableLiveData<T>.setOrPostValue(value: T) {
     if (Looper.myLooper() == Looper.getMainLooper())

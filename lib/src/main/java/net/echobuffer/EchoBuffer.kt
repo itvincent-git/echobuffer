@@ -119,7 +119,7 @@ private class RealEchoBufferRequest<S, R>(
     private val cache = RealCache<S, R>(maxCacheSize)
     private val responseChannel = BroadcastChannel<Map<S, R>>(capacity)
     private val scope = CoroutineScope(Job() + dispatcher)
-    private var lastRTT = 100L//上一次请求回复的时长
+    private var lastRTT = requestIntervalRange.first//上一次请求回复的时长，默认值为设置的间隔小值
 
     @Volatile
     private var counter = 0L//单个查询的计数标记
@@ -138,10 +138,7 @@ private class RealEchoBufferRequest<S, R>(
                 fetchAllChannelDataToSet(intentToRequests, alreadyInCaches)
                 sendAlreadyCacheToResponse(alreadyInCaches)
                 if (intentToRequests.isEmpty()) continue
-                val realRTT = requestDelegateToResChannel(intentToRequests)
-                lastRTT = realRTT.coerceIn(requestIntervalRange)
-                echoLog.d("single update realRTT:$realRTT lastRTT:$lastRTT [$counter] ${this@RealEchoBufferRequest
-                    .requestDelegate}")
+                requestDelegateToResChannel(intentToRequests)
                 counter++
             }
         }
@@ -152,8 +149,8 @@ private class RealEchoBufferRequest<S, R>(
         val realRTT = measureTimeMillis {
             echoLog.d("single requestDelegate[$counter][size:${intentToRequests.size}] ${this@RealEchoBufferRequest
                 .requestDelegate} $intentToRequests")
-
-            if (!enableRequestDelegateInBatches) {
+            if (!enableRequestDelegateInBatches || intentToRequests.size < chunkSize) {
+                //关闭批量 或者 小于chunkSize就直接请求
                 val delegateResponse = withTimeoutOrNull(requestTimeoutMs) {
                     requestDelegate.request(intentToRequests)
                 }
@@ -170,6 +167,10 @@ private class RealEchoBufferRequest<S, R>(
         resultMap?.let {
             cache.putAll(it)
             responseChannel.offer(it)
+            //成功请求能打印日志及更新rtt
+            echoLog.d("single update realRTT:$realRTT lastRTT:$lastRTT [$counter] ${this@RealEchoBufferRequest
+                .requestDelegate}")
+            lastRTT = realRTT.coerceIn(requestIntervalRange)
         }
         return realRTT
     }
@@ -283,9 +284,9 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
 
-        override suspend fun enqueueAwaitOrNull(): R? {
+        override suspend fun enqueueAwaitOrNull(retry: Int): R? {
             return try {
-                withTimeout(requestTimeoutMs + lastRTT) {
+                withTimeout(requestTimeoutMs) {
                     return@withTimeout responseChannel.openSubscription().consume {
                         for (map in this) {
                             val r = map[requestData]
@@ -299,8 +300,11 @@ private class RealEchoBufferRequest<S, R>(
                     }
                 }
             } catch (t: Throwable) {
-                echoLog.d("single enqueueAwait:${t.message} ${this@RealEchoBufferRequest
+                echoLog.d("single enqueueAwait error:${t.message} ${this@RealEchoBufferRequest
                     .requestDelegate} $requestData")
+                if (retry > 0) {
+                    return enqueueAwaitOrNull(retry - 1)
+                }
                 return null
             }
         }
@@ -331,7 +335,7 @@ private class RealEchoBufferRequest<S, R>(
             }
         }
 
-        override suspend fun enqueueAwaitOrNull(): Map<S, R>? {
+        override suspend fun enqueueAwaitOrNull(retry: Int): Map<S, R>? {
             return try {
                 withTimeout(requestTimeoutMs) {
                     return@withTimeout fetchBatchData()
@@ -339,6 +343,9 @@ private class RealEchoBufferRequest<S, R>(
             } catch (t: Throwable) {
                 echoLog.d("batch enqueueAwait:${t.message} [B$index]${this@RealEchoBufferRequest
                     .requestDelegate} $requestData")
+                if (retry > 0) {
+                    return enqueueAwaitOrNull(retry - 1)
+                }
                 return null
             }
         }
